@@ -80,3 +80,56 @@ func TestSaveRejectsUnsafeName(t *testing.T) {
 		t.Fatal("want error for path-traversal name, got nil")
 	}
 }
+
+func TestSaveLeavesNoTempFileAndReplacesAtomically(t *testing.T) {
+	base := t.TempDir()
+	s := &Store{Base: base}
+	if err := s.Save(&canvas.Diagram{Name: "demo"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := s.Save(&canvas.Diagram{Name: "demo", Next: 7}); err != nil {
+		t.Fatalf("Save again: %v", err)
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "demo.json" {
+		t.Errorf("store holds %v, want only demo.json", entries)
+	}
+	d, err := s.Load("demo")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if d.Next != 7 {
+		t.Errorf("Next = %d, want 7", d.Next)
+	}
+	info, err := os.Stat(s.Path("demo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Errorf("mode = %v, want -rw-r--r--", info.Mode().Perm())
+	}
+}
+
+func TestModTimeMissingDiagramIsZero(t *testing.T) {
+	s := &Store{Base: t.TempDir()}
+	got, err := s.ModTime("demo")
+	if err != nil {
+		t.Fatalf("ModTime: %v", err)
+	}
+	if !got.IsZero() {
+		t.Errorf("ModTime = %v, want zero", got)
+	}
+	if err := s.Save(&canvas.Diagram{Name: "demo"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err = s.ModTime("demo")
+	if err != nil {
+		t.Fatalf("ModTime: %v", err)
+	}
+	if got.IsZero() {
+		t.Error("ModTime = zero after Save")
+	}
+}

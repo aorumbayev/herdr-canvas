@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"herdr-canvas/internal/canvas"
 )
@@ -31,12 +32,17 @@ type Store struct {
 	Base string
 }
 
+// dir returns the directory this Store reads and writes.
+func (s *Store) dir() string {
+	if s.Base == "" {
+		return Dir()
+	}
+	return s.Base
+}
+
 // Path returns the on-disk path for a named diagram.
 func (s *Store) Path(name string) string {
-	if s.Base == "" {
-		return filepath.Join(Dir(), name+".json")
-	}
-	return filepath.Join(s.Base, name+".json")
+	return filepath.Join(s.dir(), name+".json")
 }
 
 // Save writes a diagram as <name>.json, creating the directory if needed.
@@ -48,10 +54,42 @@ func (s *Store) Save(d *canvas.Diagram) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(s.Path(d.Name)), 0o755); err != nil {
+	path := s.Path(d.Name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(s.Path(d.Name), append(b, '\n'), 0o644)
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+d.Name+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(append(b, '\n')); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
+// ModTime returns the modification time of a named diagram. A diagram that is
+// not in the store yields the zero time.
+func (s *Store) ModTime(name string) (time.Time, error) {
+	if err := validateName(name); err != nil {
+		return time.Time{}, err
+	}
+	info, err := os.Stat(s.Path(name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return time.Time{}, nil
+		}
+		return time.Time{}, err
+	}
+	return info.ModTime(), nil
 }
 
 // Load reads a named diagram from the store.
@@ -83,7 +121,7 @@ func validateName(name string) error {
 
 // List returns the names of all diagrams in the store, sorted.
 func (s *Store) List() ([]string, error) {
-	dir := filepath.Dir(s.Path("x"))
+	dir := s.dir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
