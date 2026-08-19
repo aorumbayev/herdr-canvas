@@ -62,15 +62,26 @@ func branchName(cwd string) string {
 	return run(cwd, "rev-parse", "--short", "HEAD")
 }
 
+// worktreeName returns the worktree-root basename in a linked worktree, else
+// the empty string. --git-common-dir and --git-dir differ only in a linked
+// worktree.
 func worktreeName(cwd string) string {
-	if !strings.Contains(run(cwd, "rev-parse", "--git-dir"), "worktrees") {
+	common := run(cwd, "rev-parse", "--absolute-git-dir")
+	if common == "" {
+		return ""
+	}
+	if run(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir") == common {
 		return ""
 	}
 	return filepath.Base(run(cwd, "rev-parse", "--show-toplevel"))
 }
 
 // originBasename strips the scheme, host, and .git suffix from a remote URL.
+// An empty URL yields an empty name, so Composite falls back to cwd.
 func originBasename(url string) string {
+	if url == "" {
+		return ""
+	}
 	url = strings.TrimSuffix(url, ".git")
 	if i := strings.LastIndex(url, ":"); i >= 0 && !strings.Contains(url[:i], "/") {
 		url = url[i+1:]
