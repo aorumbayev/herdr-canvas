@@ -185,6 +185,27 @@ func Export(d *Diagram) string {
 	return d.Render().String()
 }
 
+// Window renders the w by h block of cells whose top-left cell is (x0, y0).
+// It always returns h lines, so a caller can hold a fixed viewport.
+func (g Grid) Window(x0, y0, w, h int) string {
+	var sb strings.Builder
+	for row := 0; row < h; row++ {
+		if row > 0 {
+			sb.WriteByte('\n')
+		}
+		line := make([]rune, 0, w)
+		for col := 0; col < w; col++ {
+			if r, ok := g[[2]int{x0 + col, y0 + row}]; ok {
+				line = append(line, r)
+			} else {
+				line = append(line, ' ')
+			}
+		}
+		sb.WriteString(strings.TrimRight(string(line), " "))
+	}
+	return sb.String()
+}
+
 // String renders the grid as a compact, space-filled rectangle.
 func (g Grid) String() string {
 	if len(g) == 0 {

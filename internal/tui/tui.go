@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -40,38 +41,56 @@ var toolNames = map[tool]string{
 	toolDelete: "delete",
 }
 
+// The editor occupies the whole terminal: one header row, the canvas, one
+// status row.
+const (
+	headerRows = 1
+	statusRows = 1
+	defaultW   = 80
+	defaultH   = 24
+)
+
 type model struct {
 	s     *store.Store
 	d     *canvas.Diagram
 	phase phase
+	mtime time.Time
 
 	names []string
 	sel   int
 
 	nameInput string
 
-	tool    tool
-	cursor  [2]int
-	mouse   bool
-	anchor  [2]int
-	grabID  string
-	pending []canvas.Cell
-	typing  bool
-	textPos [2]int
-	textBuf string
-	status  string
+	width, height int
+	origin        [2]int
+
+	tool     tool
+	cursor   [2]int
+	mouse    bool
+	anchored bool
+	anchor   [2]int
+	grabID   string
+	pending  []canvas.Cell
+	typing   bool
+	textPos  [2]int
+	textBuf  string
+	status   string
 }
 
 // Run launches the TUI: the editor for the composite diagram in cwd, or the
 // picker when cwd is not a git repository.
 func Run(cwd string) error {
 	s := store.New()
-	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox}
+	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox, width: defaultW, height: defaultH}
 
 	nm, err := name.Composite(cwd)
 	if err != nil {
 		m.phase = phasePick
-		m.names, _ = s.List()
+		names, lerr := s.List()
+		if lerr != nil {
+			m.status = lerr.Error()
+		}
+		m.names = names
 	} else {
 		n := nm.String()
 		d, lerr := s.Load(n)
@@ -82,6 +101,7 @@ func Run(cwd string) error {
 			d = &canvas.Diagram{Name: n}
 		}
 		m.d = d
+		m.mtime, _ = s.ModTime(n)
 		m.phase = phaseEdit
 	}
 
@@ -95,11 +115,15 @@ func RunNamed(n string) error {
 	if err != nil {
 		return err
 	}
-	return run(model{s: s, d: d, phase: phaseEdit, tool: toolBox})
+	mt, _ := s.ModTime(n)
+	return run(model{
+		s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox,
+		width: defaultW, height: defaultH,
+	})
 }
 
 func run(m model) error {
-	p := tea.NewProgram(m, tea.WithMouseCellMotion())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }
@@ -108,7 +132,12 @@ func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.ensureVisible()
+		return m, nil
 	case tea.KeyMsg:
+		m.status = ""
 		switch m.phase {
 		case phasePick:
 			cmd := m.pickKey(msg)
@@ -126,6 +155,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.MouseMsg:
 		if m.phase == phaseEdit && !m.typing {
+			m.status = ""
 			cmd := m.mouseMsg(msg)
 			return m, cmd
 		}
@@ -147,6 +177,7 @@ func (m *model) pickKey(msg tea.KeyMsg) tea.Cmd {
 		if m.sel < len(m.names) {
 			if d, err := m.s.Load(m.names[m.sel]); err == nil {
 				m.d = d
+				m.mtime, _ = m.s.ModTime(d.Name)
 				m.phase = phaseEdit
 			} else {
 				m.status = err.Error()
@@ -167,11 +198,20 @@ func (m *model) nameKey(msg tea.KeyMsg) tea.Cmd {
 		if m.nameInput == "" {
 			return nil
 		}
-		m.d = &canvas.Diagram{Name: m.nameInput}
-		if err := m.s.Save(m.d); err != nil {
+		if _, err := m.s.Load(m.nameInput); err == nil {
+			m.status = fmt.Sprintf("diagram %q already exists", m.nameInput)
+			return nil
+		} else if !os.IsNotExist(err) {
 			m.status = err.Error()
 			return nil
 		}
+		d := &canvas.Diagram{Name: m.nameInput}
+		if err := m.s.Save(d); err != nil {
+			m.status = err.Error()
+			return nil
+		}
+		m.d = d
+		m.mtime, _ = m.s.ModTime(d.Name)
 		m.phase = phaseEdit
 	case "esc":
 		m.phase = phasePick
@@ -190,11 +230,7 @@ func (m *model) nameKey(msg tea.KeyMsg) tea.Cmd {
 func (m *model) typeKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
-		if err := m.d.Apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf}); err != nil {
-			m.status = err.Error()
-		} else {
-			m.save()
-		}
+		m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
 		m.typing = false
 		m.textBuf = ""
 	case "esc":
@@ -218,14 +254,19 @@ func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
 		m.tool = toolFor(msg.String())
 		m.grabID = ""
 		m.mouse = false
+		m.anchored = false
+		m.anchor = [2]int{}
+		m.pending = nil
 	case "up":
-		m.cursor[1]--
+		m.moveCursor(0, -1)
 	case "down":
-		m.cursor[1]++
+		m.moveCursor(0, 1)
 	case "left":
-		m.cursor[0]--
+		m.moveCursor(-1, 0)
 	case "right":
-		m.cursor[0]++
+		m.moveCursor(1, 0)
+	case " ", "enter":
+		m.keyCommit(msg.String() == "enter")
 	case "s":
 		m.save()
 	case "q", "ctrl+c":
@@ -235,8 +276,59 @@ func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+func (m *model) moveCursor(dx, dy int) {
+	m.cursor[0] = max(0, m.cursor[0]+dx)
+	m.cursor[1] = max(0, m.cursor[1]+dy)
+	m.ensureVisible()
+}
+
+// keyCommit drives the tools from the keyboard. Space and enter place the
+// anchor, then commit between the anchor and the cursor. The draw tool
+// collects a cell per space and commits them on enter.
+func (m *model) keyCommit(enter bool) {
+	switch m.tool {
+	case toolText:
+		m.textPos = m.cursor
+		m.textBuf = ""
+		m.typing = true
+	case toolDelete:
+		m.deleteAt(m.cursor)
+	case toolDraw:
+		if enter {
+			if len(m.pending) > 0 {
+				m.apply(canvas.DrawCmd{Cells: m.drawCells()})
+			}
+			return
+		}
+		m.addDrawCell(m.cursor)
+	default:
+		if !m.anchored {
+			m.anchor = m.cursor
+			m.anchored = true
+			if m.tool == toolMove {
+				if e := m.d.ElementAt(m.cursor[0], m.cursor[1]); e != nil {
+					m.grabID = e.ID
+				} else {
+					m.anchored = false
+					m.status = "nothing to move here"
+				}
+			}
+			return
+		}
+		m.anchored = false
+		m.commit()
+	}
+}
+
 func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
-	m.cursor = m.canvasPoint(msg.X, msg.Y)
+	p, ok := m.canvasPoint(msg.X, msg.Y)
+	if !ok {
+		return nil
+	}
+	m.cursor = p
+	if msg.Button != tea.MouseButtonLeft {
+		return nil
+	}
 	switch msg.Action {
 	case tea.MouseActionPress:
 		m.mouse = true
@@ -249,13 +341,7 @@ func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
 				m.grabID = e.ID
 			}
 		case toolDelete:
-			if e := m.d.ElementAt(m.cursor[0], m.cursor[1]); e != nil {
-				if err := m.d.Apply(canvas.DeleteCmd{ID: e.ID}); err != nil {
-					m.status = err.Error()
-				} else {
-					m.save()
-				}
-			}
+			m.deleteAt(m.cursor)
 		case toolText:
 			m.textPos = m.cursor
 			m.textBuf = ""
@@ -266,65 +352,125 @@ func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
 			m.addDrawCell(m.cursor)
 		}
 	case tea.MouseActionRelease:
-		m.mouse = false
-		switch m.tool {
-		case toolBox:
-			x1, y1 := min(m.anchor[0], m.cursor[0]), min(m.anchor[1], m.cursor[1])
-			x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
-			if err := m.d.Apply(canvas.BoxCmd{X1: x1, Y1: y1, X2: x2, Y2: y2}); err != nil {
-				m.status = err.Error()
-			} else {
-				m.save()
-			}
-		case toolLine:
-			end := m.snap(m.cursor)
-			if err := m.d.Apply(canvas.LineCmd{X1: m.anchor[0], Y1: m.anchor[1], X2: end[0], Y2: end[1]}); err != nil {
-				m.status = err.Error()
-			} else {
-				m.save()
-			}
-		case toolDraw:
-			if err := m.d.Apply(canvas.DrawCmd{Cells: m.drawCells()}); err != nil {
-				m.status = err.Error()
-			} else {
-				m.save()
-			}
-		case toolMove:
-			if m.grabID != "" {
-				dx, dy := m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1]
-				if err := m.d.Apply(canvas.MoveCmd{ID: m.grabID, DX: dx, DY: dy}); err != nil {
-					m.status = err.Error()
-				} else {
-					m.save()
-				}
-				m.grabID = ""
-			}
+		if !m.mouse {
+			return nil
 		}
+		m.mouse = false
+		m.commit()
 	}
 	return nil
 }
 
-// canvasPoint translates terminal mouse coordinates into the grid coordinate
-// system. The title consumes the first terminal row and Grid.String starts at
-// the grid's minimum occupied coordinate.
-func (m model) canvasPoint(x, y int) [2]int {
-	minX, minY := 0, 0
-	first := true
-	for p := range m.d.Render() {
-		if first || p[0] < minX {
-			minX = p[0]
+// commit turns the anchor and the cursor into the element the current tool
+// draws.
+func (m *model) commit() {
+	switch m.tool {
+	case toolBox:
+		x1, y1 := min(m.anchor[0], m.cursor[0]), min(m.anchor[1], m.cursor[1])
+		x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
+		m.apply(canvas.BoxCmd{X1: x1, Y1: y1, X2: x2, Y2: y2})
+	case toolLine:
+		start, end := m.snap(m.anchor), m.snap(m.cursor)
+		m.apply(canvas.LineCmd{X1: start[0], Y1: start[1], X2: end[0], Y2: end[1]})
+	case toolDraw:
+		if len(m.pending) > 0 {
+			m.apply(canvas.DrawCmd{Cells: m.drawCells()})
 		}
-		if first || p[1] < minY {
-			minY = p[1]
+	case toolMove:
+		if m.grabID != "" {
+			dx, dy := m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1]
+			m.apply(canvas.MoveCmd{ID: m.grabID, DX: dx, DY: dy})
+			m.grabID = ""
 		}
-		first = false
 	}
-	return [2]int{minX + x, minY + y - 1}
+}
+
+func (m *model) deleteAt(p [2]int) {
+	if e := m.d.ElementAt(p[0], p[1]); e != nil {
+		m.apply(canvas.DeleteCmd{ID: e.ID})
+	}
+}
+
+// canvasHeight is the number of terminal rows the canvas occupies.
+func (m model) canvasHeight() int {
+	return max(1, m.height-headerRows-statusRows)
+}
+
+// canvasPoint translates a terminal mouse position into a grid coordinate.
+// The canvas starts below the header row and shows the block of cells whose
+// top-left corner is m.origin. A position outside the canvas is not a grid
+// cell.
+func (m model) canvasPoint(x, y int) ([2]int, bool) {
+	row := y - headerRows
+	if row < 0 || row >= m.canvasHeight() || x < 0 || x >= m.width {
+		return [2]int{}, false
+	}
+	return [2]int{m.origin[0] + x, m.origin[1] + row}, true
+}
+
+// ensureVisible pans the viewport so the cursor stays inside it.
+func (m *model) ensureVisible() {
+	h := m.canvasHeight()
+	if m.cursor[0] < m.origin[0] {
+		m.origin[0] = m.cursor[0]
+	}
+	if m.cursor[0] >= m.origin[0]+m.width {
+		m.origin[0] = m.cursor[0] - m.width + 1
+	}
+	if m.cursor[1] < m.origin[1] {
+		m.origin[1] = m.cursor[1]
+	}
+	if m.cursor[1] >= m.origin[1]+h {
+		m.origin[1] = m.cursor[1] - h + 1
+	}
+	m.origin[0] = max(0, m.origin[0])
+	m.origin[1] = max(0, m.origin[1])
+}
+
+// apply reloads the diagram when another process changed the file, then runs
+// the command through the gate and saves.
+func (m *model) apply(cmd canvas.Command) {
+	m.reloadIfChanged()
+	if err := m.d.Apply(cmd); err != nil {
+		m.status = err.Error()
+		return
+	}
+	m.save()
+}
+
+// reloadIfChanged replaces the in-memory diagram when the stored file changed
+// since this session read it, so a CLI edit is not overwritten.
+func (m *model) reloadIfChanged() {
+	if m.d.Name == "" {
+		return
+	}
+	mt, err := m.s.ModTime(m.d.Name)
+	if err != nil {
+		m.status = err.Error()
+		return
+	}
+	if mt.Equal(m.mtime) {
+		return
+	}
+	d, err := m.s.Load(m.d.Name)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			m.status = err.Error()
+		}
+		return
+	}
+	m.d = d
+	m.mtime = mt
+	m.status = fmt.Sprintf("%s changed on disk; reloaded", d.Name)
 }
 
 func (m *model) save() {
 	if err := m.s.Save(m.d); err != nil {
 		m.status = err.Error()
+		return
+	}
+	if mt, err := m.s.ModTime(m.d.Name); err == nil {
+		m.mtime = mt
 	}
 }
 
@@ -338,7 +484,8 @@ func (m *model) drawCells() []canvas.Cell {
 	return cells
 }
 
-// snap returns the nearest occupied cell within radius 2, else p.
+// snap returns an occupied cell within a Chebyshev radius of 2, else p. The
+// search widens ring by ring and returns the first hit in the ring.
 func (m model) snap(p [2]int) [2]int {
 	g := m.d.Render()
 	for r := 1; r <= 2; r++ {
@@ -371,9 +518,13 @@ func (m model) View() string {
 			b.WriteString("\n")
 		}
 		b.WriteString("\n↑/↓ choose · enter open · n new · q quit\n")
+		if m.status != "" {
+			b.WriteString(m.status)
+			b.WriteString("\n")
+		}
 		return b.String()
 	case phaseName:
-		return fmt.Sprintf("name: %s\n\nenter create · esc back\n", m.nameInput)
+		return fmt.Sprintf("name: %s\n\nenter create · esc back\n%s\n", m.nameInput, m.status)
 	default:
 		return m.editView()
 	}
@@ -381,15 +532,14 @@ func (m model) View() string {
 
 func (m model) editView() string {
 	g := m.d.Render()
-	if m.mouse {
-		// overlay the in-progress box/line/draw preview
+	if m.mouse || m.anchored || len(m.pending) > 0 {
 		g = m.overlayPreview(g)
 	}
 	var b strings.Builder
 	b.WriteString(m.d.Name)
 	b.WriteString("\n")
-	b.WriteString(g.String())
-	b.WriteString("\n\n")
+	b.WriteString(g.Window(m.origin[0], m.origin[1], m.width, m.canvasHeight()))
+	b.WriteString("\n")
 	b.WriteString(m.statusLine())
 	return b.String()
 }
@@ -406,8 +556,8 @@ func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 		elems = append(elems, canvas.Element{Type: canvas.Box, X1: x1, Y1: y1, X2: x2, Y2: y2})
 	}
 	if m.tool == toolLine {
-		end := m.snap(m.cursor)
-		elems = append(elems, canvas.Element{Type: canvas.Line, X1: m.anchor[0], Y1: m.anchor[1], X2: end[0], Y2: end[1]})
+		start, end := m.snap(m.anchor), m.snap(m.cursor)
+		elems = append(elems, canvas.Element{Type: canvas.Line, X1: start[0], Y1: start[1], X2: end[0], Y2: end[1]})
 	}
 	tmp := canvas.Diagram{Elements: elems}
 	return tmp.Render()
@@ -424,7 +574,10 @@ func (m model) statusLine() string {
 	if m.grabID != "" {
 		extra = " · moving " + m.grabID
 	}
-	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/t/d/m/x tool · drag mouse · s save · q quit",
+	if m.anchored {
+		extra += fmt.Sprintf(" · anchor (%d,%d)", m.anchor[0], m.anchor[1])
+	}
+	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/t/d/m/x tool · drag mouse · arrows+space · s save · q quit",
 		toolNames[m.tool], m.cursor[0], m.cursor[1], extra)
 }
 

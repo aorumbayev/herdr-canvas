@@ -1,6 +1,9 @@
 package canvas
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRenderBox(t *testing.T) {
 	d := &Diagram{}
@@ -139,5 +142,20 @@ func TestRenderLineKeepsBoxCorner(t *testing.T) {
 	}
 	if got := d.Render()[[2]int{0, 0}]; got != '+' {
 		t.Errorf("corner = %q, want '+'", got)
+	}
+}
+
+func TestGridWindowHasFixedHeightAndOrigin(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 4, Y1: 2, X2: 6, Y2: 4}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	got := d.Render().Window(3, 1, 5, 5)
+	want := "\n +-+\n | |\n +-+\n"
+	if got != want {
+		t.Errorf("Window = %q, want %q", got, want)
+	}
+	if lines := strings.Count(got, "\n") + 1; lines != 5 {
+		t.Errorf("lines = %d, want 5", lines)
 	}
 }
