@@ -251,7 +251,8 @@ func labelCmd() *cobra.Command {
 	}
 }
 
-// runElement wires load -> apply -> save around a command builder.
+// runElement loads the diagram. runElement applies the command that build
+// returns. runElement then saves the diagram.
 func runElement(build func(*cobra.Command, []string) (canvas.Command, error)) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		c, err := build(cmd, args)

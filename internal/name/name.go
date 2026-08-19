@@ -28,11 +28,13 @@ func (n Name) String() string {
 	return s
 }
 
-// Composite computes the auto-name for cwd per the herdr-canvas rule:
-// repo = origin remote basename (else cwd basename); branch = current
-// branch with `/` slugged to `-`, a short SHA on detached HEAD, or omitted
-// with no commits; worktree = worktree-root basename, only in a linked
-// worktree.
+// Composite computes the auto-name for cwd. The repo part is the basename of
+// the origin remote. If cwd has no origin remote, the repo part is the
+// basename of cwd. The branch part is the current branch, with each `/`
+// replaced by `-`. On a detached HEAD, the branch part is a short SHA. In a
+// repository with no commits, Composite omits the branch part. The worktree
+// part is the basename of the worktree root. Composite adds the worktree part
+// only in a linked worktree.
 func Composite(cwd string) (Name, error) {
 	if run(cwd, "rev-parse", "--is-inside-work-tree") != "true" {
 		return Name{}, ErrNotRepo

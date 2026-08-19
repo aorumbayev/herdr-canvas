@@ -1,9 +1,11 @@
 package canvas
 
-// junction returns the glyph where an incoming line segment drawn as `inc`
-// lands on a cell already holding `existing`. When `cross` is true the line
-// continues through the cell; otherwise it terminates there (a tee) and the
-// stub points in the direction (sdcol, sdrow) — -1/0/1 in each axis.
+// junction returns the glyph for a cell where two line segments meet. The
+// parameter existing is the glyph already in the cell. The parameter inc is
+// the glyph of the incoming segment. If cross is true, the incoming segment
+// continues through the cell. If cross is false, the incoming segment stops in
+// the cell and makes a tee. The parameters sdcol and sdrow give the direction
+// of the tee stub. Each of these two parameters is -1, 0 or 1.
 func junction(existing, inc rune, cross bool, sdcol, sdrow int) rune {
 	if existing == '|' && (inc == '-' || inc == '\\' || inc == '/') {
 		if cross {

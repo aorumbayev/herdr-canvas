@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// keybindingBlock is appended to the herdr config to bind the canvas hotkey.
-// prefix+c is herdr's default new-tab binding, so we use prefix+d.
+// keybindingBlock is the text that installKeybinding appends to the herdr
+// config file. herdr uses prefix+c for a new tab. This plugin uses prefix+d.
 const keybindingBlock = `
 [[keys.command]]
 key = "prefix+d"
@@ -39,8 +39,9 @@ func herdrConfigPath() string {
 	return filepath.Join(home, ".config", "herdr", "config.toml")
 }
 
-// installKeybinding appends the canvas hotkey to the herdr config if absent.
-// ponytail: append-or-skip, no config-check validation or backup.
+// installKeybinding appends the canvas hotkey to the herdr config file.
+// installKeybinding makes no change if the hotkey is already in the file.
+// This function does not validate the config file. It does not make a backup.
 func installKeybinding() error {
 	path := herdrConfigPath()
 	data, err := os.ReadFile(path)

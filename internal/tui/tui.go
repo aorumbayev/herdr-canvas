@@ -41,8 +41,8 @@ var toolNames = map[tool]string{
 	toolDelete: "delete",
 }
 
-// The editor occupies the whole terminal: one header row, the canvas, one
-// status row.
+// The editor fills the whole terminal. The editor shows one header row, then
+// the canvas, then one status row.
 const (
 	headerRows = 1
 	statusRows = 1
@@ -77,8 +77,8 @@ type model struct {
 	status   string
 }
 
-// Run launches the TUI: the editor for the composite diagram in cwd, or the
-// picker when cwd is not a git repository.
+// Run starts the TUI. Run opens the editor for the composite diagram in cwd.
+// If cwd is not a git repository, Run opens the picker.
 func Run(cwd string) error {
 	s := store.New()
 	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox, width: defaultW, height: defaultH}
@@ -282,9 +282,10 @@ func (m *model) moveCursor(dx, dy int) {
 	m.ensureVisible()
 }
 
-// keyCommit drives the tools from the keyboard. Space and enter place the
-// anchor, then commit between the anchor and the cursor. The draw tool
-// collects a cell per space and commits them on enter.
+// keyCommit operates the tools from the keyboard. The first space or enter
+// places the anchor. The second space or enter commits the element between the
+// anchor and the cursor. The draw tool collects one cell for each space and
+// commits the cells on enter.
 func (m *model) keyCommit(enter bool) {
 	switch m.tool {
 	case toolText:
@@ -361,8 +362,8 @@ func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
 	return nil
 }
 
-// commit turns the anchor and the cursor into the element the current tool
-// draws.
+// commit makes an element from the anchor and the cursor. The current tool
+// gives the type of the element.
 func (m *model) commit() {
 	switch m.tool {
 	case toolBox:
@@ -391,15 +392,14 @@ func (m *model) deleteAt(p [2]int) {
 	}
 }
 
-// canvasHeight is the number of terminal rows the canvas occupies.
 func (m model) canvasHeight() int {
 	return max(1, m.height-headerRows-statusRows)
 }
 
 // canvasPoint translates a terminal mouse position into a grid coordinate.
-// The canvas starts below the header row and shows the block of cells whose
-// top-left corner is m.origin. A position outside the canvas is not a grid
-// cell.
+// The canvas starts below the header row. The canvas shows the block of cells
+// whose top-left cell is m.origin. canvasPoint returns false for a position
+// outside the canvas.
 func (m model) canvasPoint(x, y int) ([2]int, bool) {
 	row := y - headerRows
 	if row < 0 || row >= m.canvasHeight() || x < 0 || x >= m.width {
@@ -408,7 +408,7 @@ func (m model) canvasPoint(x, y int) ([2]int, bool) {
 	return [2]int{m.origin[0] + x, m.origin[1] + row}, true
 }
 
-// ensureVisible pans the viewport so the cursor stays inside it.
+// ensureVisible moves the viewport to keep the cursor inside the viewport.
 func (m *model) ensureVisible() {
 	h := m.canvasHeight()
 	if m.cursor[0] < m.origin[0] {
@@ -427,8 +427,8 @@ func (m *model) ensureVisible() {
 	m.origin[1] = max(0, m.origin[1])
 }
 
-// apply reloads the diagram when another process changed the file, then runs
-// the command through the gate and saves.
+// apply reloads the diagram if another process changed the file. apply then
+// sends the command to the gate and saves the diagram.
 func (m *model) apply(cmd canvas.Command) {
 	m.reloadIfChanged()
 	if err := m.d.Apply(cmd); err != nil {
@@ -484,8 +484,9 @@ func (m *model) drawCells() []canvas.Cell {
 	return cells
 }
 
-// snap returns an occupied cell within a Chebyshev radius of 2, else p. The
-// search widens ring by ring and returns the first hit in the ring.
+// snap returns an occupied cell within a Chebyshev radius of 2 cells of p. If
+// no cell in that area is occupied, snap returns p. snap searches one ring at a
+// time and returns the first occupied cell in the ring.
 func (m model) snap(p [2]int) [2]int {
 	g := m.d.Render()
 	for r := 1; r <= 2; r++ {

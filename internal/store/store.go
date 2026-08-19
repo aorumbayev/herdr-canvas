@@ -15,8 +15,8 @@ import (
 // New returns a Store rooted at the central store directory.
 func New() *Store { return &Store{} }
 
-// Dir returns the central store directory, honoring XDG_DATA_HOME and
-// falling back to ~/.local/share.
+// Dir returns the central store directory. Dir uses XDG_DATA_HOME. If
+// XDG_DATA_HOME is empty, Dir uses ~/.local/share.
 func Dir() string {
 	base := os.Getenv("XDG_DATA_HOME")
 	if base == "" {
@@ -32,7 +32,6 @@ type Store struct {
 	Base string
 }
 
-// dir returns the directory this Store reads and writes.
 func (s *Store) dir() string {
 	if s.Base == "" {
 		return Dir()
@@ -108,7 +107,7 @@ func (s *Store) Load(name string) (*canvas.Diagram, error) {
 	return &d, nil
 }
 
-// validateName rejects names that could escape the store directory.
+// validateName rejects names that resolve outside the store directory.
 func validateName(name string) error {
 	if name == "" {
 		return fmt.Errorf("diagram name is empty")

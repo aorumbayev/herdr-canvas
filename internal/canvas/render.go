@@ -8,8 +8,8 @@ import (
 // Grid is the sparse (x, y) -> char render of a Diagram.
 type Grid map[[2]int]rune
 
-// Render produces the grid as a pure function of the elements in z-order
-// (slice order, later wins).
+// Render produces the grid. Render is a pure function of the elements. Later
+// elements in the slice cover earlier elements.
 func (d *Diagram) Render() Grid {
 	g := Grid{}
 	for _, e := range d.Elements {
@@ -179,14 +179,15 @@ func abs(n int) int {
 	return n
 }
 
-// Export renders a diagram to compact grid text an LLM (or human) can read:
-// the bounding rectangle of the grid with trailing whitespace trimmed.
+// Export renders a diagram to compact grid text that an LLM or a person can
+// read. The text is the bounding rectangle of the grid. Export removes the
+// trailing spaces of each line.
 func Export(d *Diagram) string {
 	return d.Render().String()
 }
 
 // Window renders the w by h block of cells whose top-left cell is (x0, y0).
-// It always returns h lines, so a caller can hold a fixed viewport.
+// Window always returns h lines, so a caller can keep a fixed viewport.
 func (g Grid) Window(x0, y0, w, h int) string {
 	var sb strings.Builder
 	for row := 0; row < h; row++ {

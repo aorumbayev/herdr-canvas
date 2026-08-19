@@ -27,9 +27,13 @@ type Cell struct {
 	Ch string `json:"ch"`
 }
 
-// Element is a single named entity in a Diagram. Fields are used per Type:
-// Box uses X1,Y1,X2,Y2 + Label; Line uses X1,Y1,X2,Y2 + Arrow; Text uses
-// X,Y + Text; Freeform uses Cells.
+// Element is a single named entity in a Diagram. Each Type uses a different
+// set of fields.
+//
+//	Box uses X1, Y1, X2, Y2 and Label.
+//	Line uses X1, Y1, X2, Y2 and Arrow.
+//	Text uses X, Y and Text.
+//	Freeform uses Cells.
 type Element struct {
 	ID    string `json:"id"`
 	Type  Type   `json:"type"`
@@ -45,8 +49,8 @@ type Element struct {
 	Cells []Cell `json:"cells,omitempty"`
 }
 
-// Diagram is the aggregate root: a named set of Elements in z-order
-// (slice order, later wins).
+// Diagram is the aggregate root. A Diagram is a named set of Elements. Later
+// elements in the slice cover earlier elements.
 type Diagram struct {
 	Name     string    `json:"name"`
 	Elements []Element `json:"elements"`

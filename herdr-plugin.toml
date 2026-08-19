@@ -8,9 +8,9 @@ platforms = ["linux", "macos"]
 [[build]]
 command = ["go", "build", "-o", "bin/herdr-canvas", "./cmd/herdr-canvas"]
 
-# Install the prefix+d hotkey that opens the canvas in a fresh tab using the
-# current pane's cwd.
-# prefix+c is herdr's default new-tab binding, so we use prefix+d.
+# This step installs the prefix+d hotkey. The hotkey opens the canvas in a new
+# tab, in the cwd of the current pane. herdr uses prefix+c for a new tab. This
+# plugin uses prefix+d.
 [[build]]
 command = ["bin/herdr-canvas", "setup"]
 

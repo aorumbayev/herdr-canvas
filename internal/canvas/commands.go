@@ -1,7 +1,7 @@
 package canvas
 
-// Command is a mutation the gate can validate and commit. The interface is
-// sealed by an unexported method, so Apply handles every implementation.
+// Command is a mutation that the gate can validate and commit. An unexported
+// method seals the interface, so Apply must handle every implementation.
 type Command interface {
 	command()
 }
@@ -24,7 +24,7 @@ type TextCmd struct {
 	Text string
 }
 
-// DrawCmd adds or edits Freeform cells.
+// DrawCmd adds a Freeform element.
 type DrawCmd struct {
 	Cells []Cell
 }

@@ -10,8 +10,9 @@ characters and never rewrite the whole JSON file.
 - **Element** — a box, line, text, or freeform cell group, each with a
   stable id (`b1`, `l2`, `t3`, `f4`, …). Ids are assigned by the tool,
   monotonically increasing, never reused after deletion.
-- **Grid** — the rendered picture. It is derived from the elements (z-order:
-  array order, later wins), never stored, never the source of truth.
+- **Grid** — the rendered picture. herdr-canvas derives the grid from the
+  elements. Later elements in the array cover earlier elements. herdr-canvas
+  never stores the grid. The grid is never the source of truth.
 
 ## Central store
 

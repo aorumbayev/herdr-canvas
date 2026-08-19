@@ -5,8 +5,8 @@ import (
 	"strconv"
 )
 
-// Apply parses, applies, and validates a command against the diagram,
-// committing it or rejecting it with an actionable error.
+// Apply validates a command against the diagram. Apply then commits the
+// command, or returns an error that names the id and the rule.
 func (d *Diagram) Apply(cmd Command) error {
 	switch c := cmd.(type) {
 	case BoxCmd:
@@ -95,9 +95,9 @@ func (d *Diagram) Apply(cmd Command) error {
 	return nil
 }
 
-// translate returns e shifted by (dx, dy), moving only the fields that belong
-// to its type. It returns an error when the shifted geometry is not
-// well-formed.
+// translate moves the element e by (dx, dy). translate changes only the
+// fields that belong to the type of the element. translate returns an error if
+// the new geometry is not well-formed.
 func translate(e Element, dx, dy int) (Element, error) {
 	switch e.Type {
 	case Box:
@@ -162,9 +162,9 @@ func validateEndpoints(x1, y1, x2, y2 int) error {
 	return nil
 }
 
-// nextID returns the next stable id for the given type letter, continuing a
-// single monotonic counter shared across all types; never reused after
-// deletion.
+// nextID returns the next stable id for the given type letter. All types
+// share one counter, and the counter only increases. The tool never reuses an
+// id after a delete.
 func (d *Diagram) nextID(letter string) string {
 	n := d.Next
 	for _, e := range d.Elements {
