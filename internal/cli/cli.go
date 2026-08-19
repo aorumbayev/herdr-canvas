@@ -38,11 +38,14 @@ func runTUI(cmd *cobra.Command, args []string) error {
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "herdr-canvas",
-		Short: "Dead-simple ASCII diagram canvas",
-		RunE:  runTUI,
+		Use:           "herdr-canvas",
+		Short:         "Dead-simple ASCII diagram canvas",
+		RunE:          runTUI,
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 	root.PersistentFlags().String("name", "", "diagram name (defaults to composite repo@branch)")
+	root.PersistentFlags().Bool("create", false, "create the diagram when it does not exist")
 	root.AddCommand(
 		newCmd(),
 		openCmd(),
@@ -156,7 +159,7 @@ func lineCmd() *cobra.Command {
 			if err != nil {
 				return nil, err
 			}
-			arr, err := arrow(mustFlag(cmd, "arrow"))
+			arr, err := arrow(flagString(cmd, "arrow"))
 			if err != nil {
 				return nil, err
 			}
@@ -277,6 +280,9 @@ func loadDiagram(cmd *cobra.Command) (*store.Store, *canvas.Diagram, error) {
 		if !os.IsNotExist(err) {
 			return nil, nil, err
 		}
+		if create, _ := cmd.Flags().GetBool("create"); !create {
+			return nil, nil, fmt.Errorf("no diagram %q; run `herdr-canvas new %s` or pass --create", n, n)
+		}
 		d = &canvas.Diagram{Name: n}
 	}
 	return s, d, nil
@@ -318,7 +324,8 @@ func arrow(s string) (canvas.Arrow, error) {
 	return "", fmt.Errorf("invalid arrow %q (want none|start|end|both)", s)
 }
 
-func mustFlag(cmd *cobra.Command, name string) string {
+// flagString returns a string flag's value, or "" when the flag is absent.
+func flagString(cmd *cobra.Command, name string) string {
 	v, _ := cmd.Flags().GetString(name)
 	return v
 }

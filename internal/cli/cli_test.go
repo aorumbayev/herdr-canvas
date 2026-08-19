@@ -47,3 +47,31 @@ func TestCLIReferentialReject(t *testing.T) {
 		t.Fatal("want referential error, got nil")
 	}
 }
+
+func TestCLIMissingDiagramFails(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	root := newRootCmd()
+	root.SetArgs([]string{"--name", "nope", "box", "0", "0", "1", "1"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("want missing-diagram error, got nil")
+	}
+	root = newRootCmd()
+	root.SetArgs([]string{"--name", "nope", "export"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("want missing-diagram error from export, got nil")
+	}
+}
+
+func TestCLICreateFlagCreatesDiagram(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	root := newRootCmd()
+	root.SetArgs([]string{"--name", "demo", "--create", "box", "0", "0", "3", "2", "hi"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("box --create: %v", err)
+	}
+	got := run(t, "--name", "demo", "export")
+	want := "+--+\n|hi|\n+--+\n"
+	if got != want {
+		t.Errorf("export = %q, want %q", got, want)
+	}
+}

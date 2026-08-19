@@ -37,7 +37,11 @@ herdr-canvas move <id> <dx> <dy>                 # dx/dy may be negative
 herdr-canvas delete <id>
 herdr-canvas label <id> <label>
 herdr-canvas skill                       # print this document
+herdr-canvas setup                       # install the herdr hotkey binding
 ```
+
+An element command or `export` fails when the diagram does not exist. Create it
+with `new`, or pass `--create` to the command.
 
 ## The gate
 
@@ -78,6 +82,15 @@ trailing whitespace trimmed, e.g.:
 |hi|
 +--+
 ```
+
+## Installation side effect
+
+`herdr-canvas setup` runs as a `[[build]]` step of the herdr plugin. It appends
+a `prefix+d` keybinding to the shared `~/.config/herdr/config.toml`. It writes
+the binding once and never corrects it afterwards. Nothing removes the binding
+when the plugin is uninstalled — delete the block by hand. A locally linked
+plugin (`herdr plugin link`) runs the same build step, so linking this repo also
+writes to that shared config.
 
 ## Composite name
 
