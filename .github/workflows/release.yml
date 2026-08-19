@@ -1,0 +1,58 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  semantic-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      # The first run finds no release and starts at 0.1.0. After that a feat
+      # commit raises the minor version and a fix commit raises the patch
+      # version. The major version stays at 0, so a breaking change also
+      # raises the minor version.
+      - name: Read the next version
+        id: dry
+        uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f # v1.24.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          allow-initial-development-versions: true
+          dry: true
+
+      - name: Stop when no commit needs a release
+        if: steps.dry.outputs.version == ''
+        run: |
+          echo "No feat, fix, perf, or revert commit since the last release."
+          exit 1
+
+      # herdr reads the version from herdr-plugin.toml in the checked-out
+      # source, so the tag must point at a commit that already holds the new
+      # version.
+      - name: Commit the version
+        env:
+          VERSION: ${{ steps.dry.outputs.version }}
+        run: |
+          ./scripts/stamp-version.sh "$VERSION"
+          git config user.name herdr-canvas-release
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -am "chore(release): $VERSION [skip ci]"
+          git push origin HEAD:main
+
+      - name: Tag and publish
+        uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f # v1.24.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          allow-initial-development-versions: true
