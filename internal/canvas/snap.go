@@ -31,7 +31,7 @@ func junction(existing, inc rune, cross bool, sdcol, sdrow int) rune {
 			return '┼'
 		}
 	}
-	if isJunction(existing) {
+	if existing == '+' || isJunction(existing) {
 		return existing
 	}
 	return inc

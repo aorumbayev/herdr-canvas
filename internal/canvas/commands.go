@@ -1,5 +1,11 @@
 package canvas
 
+// Command is a mutation the gate can validate and commit. The interface is
+// sealed by an unexported method, so Apply handles every implementation.
+type Command interface {
+	command()
+}
+
 // BoxCmd adds a Box (two corners) with an optional label.
 type BoxCmd struct {
 	X1, Y1, X2, Y2 int
@@ -39,3 +45,11 @@ type LabelCmd struct {
 	ID    string
 	Label string
 }
+
+func (BoxCmd) command()    {}
+func (LineCmd) command()   {}
+func (TextCmd) command()   {}
+func (DrawCmd) command()   {}
+func (MoveCmd) command()   {}
+func (DeleteCmd) command() {}
+func (LabelCmd) command()  {}

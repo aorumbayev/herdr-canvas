@@ -12,7 +12,7 @@ import (
 func TestSaveLoadRoundTrip(t *testing.T) {
 	s := &Store{Base: t.TempDir()}
 	d := &canvas.Diagram{Name: "demo"}
-	for _, c := range []any{
+	for _, c := range []canvas.Command{
 		canvas.BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2, Label: "hi"},
 		canvas.LineCmd{X1: 0, Y1: 0, X2: 3, Y2: 3, Arrow: canvas.ArrowEnd},
 		canvas.TextCmd{X: 5, Y: 5, Text: "héllo"},

@@ -46,6 +46,25 @@ func drawBox(g Grid, e Element) {
 	g[[2]int{e.X2, e.Y1}] = '+'
 	g[[2]int{e.X1, e.Y2}] = '+'
 	g[[2]int{e.X2, e.Y2}] = '+'
+	drawLabel(g, e)
+}
+
+// drawLabel writes the box label on the first inner row, clipped to the inner
+// width. A box with no inner cell carries no label.
+func drawLabel(g Grid, e Element) {
+	if e.Label == "" {
+		return
+	}
+	width := e.X2 - e.X1 - 1
+	if width <= 0 || e.Y2-e.Y1 < 2 {
+		return
+	}
+	for i, r := range []rune(e.Label) {
+		if i >= width {
+			break
+		}
+		g[[2]int{e.X1 + 1 + i, e.Y1 + 1}] = r
+	}
 }
 
 func drawLine(g Grid, e Element) {

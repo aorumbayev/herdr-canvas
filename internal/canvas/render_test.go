@@ -98,3 +98,46 @@ func TestRenderLineCrossesBoxEdge(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderBoxLabel(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 2, Label: "hi"}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got, want := Export(d), "+--+\n|hi|\n+--+"; got != want {
+		t.Errorf("Export = %q, want %q", got, want)
+	}
+}
+
+func TestRenderBoxLabelClippedToInnerWidth(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 2, Label: "hello"}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got, want := Export(d), "+--+\n|he|\n+--+"; got != want {
+		t.Errorf("Export = %q, want %q", got, want)
+	}
+}
+
+func TestRenderBoxLabelSkippedWithoutInnerRow(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 1, Label: "hi"}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got, want := Export(d), "+--+\n+--+"; got != want {
+		t.Errorf("Export = %q, want %q", got, want)
+	}
+}
+
+func TestRenderLineKeepsBoxCorner(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
+		t.Fatalf("Apply box: %v", err)
+	}
+	if err := d.Apply(LineCmd{X1: 0, Y1: 0, X2: 4, Y2: 0}); err != nil {
+		t.Fatalf("Apply line: %v", err)
+	}
+	if got := d.Render()[[2]int{0, 0}]; got != '+' {
+		t.Errorf("corner = %q, want '+'", got)
+	}
+}

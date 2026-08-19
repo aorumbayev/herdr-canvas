@@ -136,7 +136,7 @@ func boxCmd() *cobra.Command {
 		Use:   "box <x1> <y1> <x2> <y2> [label]",
 		Short: "Add a box (two corners) with an optional label",
 		Args:  cobra.MinimumNArgs(4),
-		RunE: runElement(func(cmd *cobra.Command, a []string) (any, error) {
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			n, err := ints(a[:4])
 			if err != nil {
 				return nil, err
@@ -151,7 +151,7 @@ func lineCmd() *cobra.Command {
 		Use:   "line <x1> <y1> <x2> <y2>",
 		Short: "Add a line (two endpoints) with an optional arrow",
 		Args:  cobra.ExactArgs(4),
-		RunE: runElement(func(cmd *cobra.Command, a []string) (any, error) {
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			n, err := ints(a)
 			if err != nil {
 				return nil, err
@@ -172,7 +172,7 @@ func textCmd() *cobra.Command {
 		Use:   "text <x> <y> <text>",
 		Short: "Place a text string at a coordinate",
 		Args:  cobra.MinimumNArgs(3),
-		RunE: runElement(func(cmd *cobra.Command, a []string) (any, error) {
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			n, err := ints(a[:2])
 			if err != nil {
 				return nil, err
@@ -187,7 +187,7 @@ func drawCmd() *cobra.Command {
 		Use:   "draw <x> <y> <ch> [<x> <y> <ch> ...]",
 		Short: "Set freeform cells (x y char triples)",
 		Args:  cobra.MinimumNArgs(3),
-		RunE: runElement(func(cmd *cobra.Command, a []string) (any, error) {
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			if len(a)%3 != 0 {
 				return nil, fmt.Errorf("draw requires x y ch triples")
 			}
@@ -213,7 +213,7 @@ func moveCmd() *cobra.Command {
 		Use:   "move <id> <dx> <dy>",
 		Short: "Translate an element",
 		Args:  cobra.ExactArgs(3),
-		RunE: runElement(func(cmd *cobra.Command, a []string) (any, error) {
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			n, err := ints(a[1:])
 			if err != nil {
 				return nil, err
@@ -231,7 +231,7 @@ func deleteCmd() *cobra.Command {
 		Use:   "delete <id>",
 		Short: "Remove an element",
 		Args:  cobra.ExactArgs(1),
-		RunE: runElement(func(cmd *cobra.Command, a []string) (any, error) {
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			return canvas.DeleteCmd{ID: a[0]}, nil
 		}),
 	}
@@ -242,14 +242,14 @@ func labelCmd() *cobra.Command {
 		Use:   "label <id> <label>",
 		Short: "Set an element's label",
 		Args:  cobra.MinimumNArgs(2),
-		RunE: runElement(func(cmd *cobra.Command, a []string) (any, error) {
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			return canvas.LabelCmd{ID: a[0], Label: strings.Join(a[1:], " ")}, nil
 		}),
 	}
 }
 
 // runElement wires load -> apply -> save around a command builder.
-func runElement(build func(*cobra.Command, []string) (any, error)) func(*cobra.Command, []string) error {
+func runElement(build func(*cobra.Command, []string) (canvas.Command, error)) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		c, err := build(cmd, args)
 		if err != nil {

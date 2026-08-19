@@ -7,7 +7,7 @@ import (
 
 // Apply parses, applies, and validates a command against the diagram,
 // committing it or rejecting it with an actionable error.
-func (d *Diagram) Apply(cmd any) error {
+func (d *Diagram) Apply(cmd Command) error {
 	switch c := cmd.(type) {
 	case BoxCmd:
 		if err := validateCorners(c.X1, c.Y1, c.X2, c.Y2); err != nil {
@@ -50,6 +50,9 @@ func (d *Diagram) Apply(cmd any) error {
 			Text: c.Text,
 		})
 	case DrawCmd:
+		if len(c.Cells) == 0 {
+			return fmt.Errorf("draw: cell list must be non-empty")
+		}
 		for _, cell := range c.Cells {
 			if cell.X < 0 || cell.Y < 0 {
 				return fmt.Errorf("draw: cell coordinates must be non-negative, got (%d,%d)", cell.X, cell.Y)
@@ -65,12 +68,11 @@ func (d *Diagram) Apply(cmd any) error {
 		if err != nil {
 			return err
 		}
-		e.X1, e.Y1, e.X2, e.Y2 = e.X1+c.DX, e.Y1+c.DY, e.X2+c.DX, e.Y2+c.DY
-		e.X, e.Y = e.X+c.DX, e.Y+c.DY
-		for i := range e.Cells {
-			e.Cells[i].X += c.DX
-			e.Cells[i].Y += c.DY
+		moved, err := translate(*e, c.DX, c.DY)
+		if err != nil {
+			return fmt.Errorf("move %s: %w", c.ID, err)
 		}
+		*e = moved
 	case DeleteCmd:
 		if _, err := d.find(c.ID); err != nil {
 			return err
@@ -87,8 +89,46 @@ func (d *Diagram) Apply(cmd any) error {
 			return err
 		}
 		e.Label = c.Label
+	default:
+		return fmt.Errorf("unsupported command %T", cmd)
 	}
 	return nil
+}
+
+// translate returns e shifted by (dx, dy), moving only the fields that belong
+// to its type. It returns an error when the shifted geometry is not
+// well-formed.
+func translate(e Element, dx, dy int) (Element, error) {
+	switch e.Type {
+	case Box:
+		e.X1, e.Y1, e.X2, e.Y2 = e.X1+dx, e.Y1+dy, e.X2+dx, e.Y2+dy
+		if err := validateCorners(e.X1, e.Y1, e.X2, e.Y2); err != nil {
+			return e, err
+		}
+	case Line:
+		e.X1, e.Y1, e.X2, e.Y2 = e.X1+dx, e.Y1+dy, e.X2+dx, e.Y2+dy
+		if err := validateEndpoints(e.X1, e.Y1, e.X2, e.Y2); err != nil {
+			return e, err
+		}
+	case Text:
+		e.X, e.Y = e.X+dx, e.Y+dy
+		if e.X < 0 || e.Y < 0 {
+			return e, fmt.Errorf("coordinates must be non-negative, got (%d,%d)", e.X, e.Y)
+		}
+	case Freeform:
+		cells := make([]Cell, len(e.Cells))
+		for i, c := range e.Cells {
+			c.X, c.Y = c.X+dx, c.Y+dy
+			if c.X < 0 || c.Y < 0 {
+				return e, fmt.Errorf("cell coordinates must be non-negative, got (%d,%d)", c.X, c.Y)
+			}
+			cells[i] = c
+		}
+		e.Cells = cells
+	default:
+		return e, fmt.Errorf("unknown element type %q", e.Type)
+	}
+	return e, nil
 }
 
 // find returns a pointer to the element with the given id, or a

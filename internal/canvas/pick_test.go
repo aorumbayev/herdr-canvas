@@ -4,7 +4,7 @@ import "testing"
 
 func TestElementAt(t *testing.T) {
 	d := &Diagram{}
-	for _, c := range []any{
+	for _, c := range []Command{
 		BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2},
 		TextCmd{X: 5, Y: 5, Text: "hi"},
 		LineCmd{X1: 10, Y1: 10, X2: 12, Y2: 10},

@@ -23,3 +23,12 @@ func TestJunctionCrossAndTee(t *testing.T) {
 		}
 	}
 }
+
+func TestJunctionKeepsBoxCorner(t *testing.T) {
+	if got := junction('+', '-', true, 0, 0); got != '+' {
+		t.Errorf("junction('+','-') = %q, want '+'", got)
+	}
+	if got := junction('+', '|', false, 0, 1); got != '+' {
+		t.Errorf("junction('+','|') = %q, want '+'", got)
+	}
+}

@@ -143,3 +143,57 @@ func TestApplyLabelSetsAndRejectsUnknownID(t *testing.T) {
 		t.Fatal("want error for unknown id, got nil")
 	}
 }
+
+func TestApplyRejectsEmptyDraw(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(DrawCmd{}); err == nil {
+		t.Fatal("want error for empty cell list, got nil")
+	}
+	if len(d.Elements) != 0 {
+		t.Errorf("elements = %d, want 0", len(d.Elements))
+	}
+}
+
+func TestApplyRejectsMoveOffCanvas(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
+		t.Fatalf("Apply box: %v", err)
+	}
+	if err := d.Apply(TextCmd{X: 1, Y: 1, Text: "hi"}); err != nil {
+		t.Fatalf("Apply text: %v", err)
+	}
+	if err := d.Apply(DrawCmd{Cells: []Cell{{X: 0, Y: 0, Ch: "#"}}}); err != nil {
+		t.Fatalf("Apply draw: %v", err)
+	}
+	for _, id := range []string{"b1", "t2", "f3"} {
+		if err := d.Apply(MoveCmd{ID: id, DX: -100, DY: -100}); err == nil {
+			t.Errorf("move %s off canvas: want error, got nil", id)
+		}
+	}
+	if got := d.Elements[0]; got.X1 != 0 || got.Y1 != 0 || got.X2 != 2 || got.Y2 != 2 {
+		t.Errorf("box changed after rejected move: %+v", got)
+	}
+	if got := d.Elements[1]; got.X != 1 || got.Y != 1 {
+		t.Errorf("text changed after rejected move: %+v", got)
+	}
+	if got := d.Elements[2].Cells[0]; got.X != 0 || got.Y != 0 {
+		t.Errorf("freeform changed after rejected move: %+v", got)
+	}
+}
+
+func TestApplyMoveTouchesOnlyTypeFields(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 1, Y1: 1, X2: 3, Y2: 3}); err != nil {
+		t.Fatalf("Apply box: %v", err)
+	}
+	if err := d.Apply(MoveCmd{ID: "b1", DX: 2, DY: 1}); err != nil {
+		t.Fatalf("Apply move: %v", err)
+	}
+	e := d.Elements[0]
+	if e.X1 != 3 || e.Y1 != 2 || e.X2 != 5 || e.Y2 != 4 {
+		t.Errorf("corners = (%d,%d)-(%d,%d), want (3,2)-(5,4)", e.X1, e.Y1, e.X2, e.Y2)
+	}
+	if e.X != 0 || e.Y != 0 {
+		t.Errorf("box got x/y stamped: (%d,%d)", e.X, e.Y)
+	}
+}
