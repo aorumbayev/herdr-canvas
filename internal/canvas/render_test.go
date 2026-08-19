@@ -23,6 +23,20 @@ func TestRenderBox(t *testing.T) {
 	}
 }
 
+func TestExport(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 2}); err != nil {
+		t.Fatalf("Apply box: %v", err)
+	}
+	if err := d.Apply(TextCmd{X: 1, Y: 1, Text: "hi"}); err != nil {
+		t.Fatalf("Apply text: %v", err)
+	}
+	want := "+--+\n|hi|\n+--+"
+	if got := Export(d); got != want {
+		t.Errorf("Export = %q, want %q", got, want)
+	}
+}
+
 func TestRenderLineWithArrows(t *testing.T) {
 	d := &Diagram{}
 	if err := d.Apply(LineCmd{X1: 0, Y1: 0, X2: 3, Y2: 0, Arrow: ArrowEnd}); err != nil {

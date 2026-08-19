@@ -1,5 +1,10 @@
 package canvas
 
+import (
+	"math"
+	"strings"
+)
+
 // Grid is the sparse (x, y) -> char render of a Diagram.
 type Grid map[[2]int]rune
 
@@ -153,4 +158,47 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+// Export renders a diagram to compact grid text an LLM (or human) can read:
+// the bounding rectangle of the grid with trailing whitespace trimmed.
+func Export(d *Diagram) string {
+	return d.Render().String()
+}
+
+// String renders the grid as a compact, space-filled rectangle.
+func (g Grid) String() string {
+	if len(g) == 0 {
+		return ""
+	}
+	minX, minY := math.MaxInt, math.MaxInt
+	maxX, maxY := math.MinInt, math.MinInt
+	for p := range g {
+		if p[0] < minX {
+			minX = p[0]
+		}
+		if p[0] > maxX {
+			maxX = p[0]
+		}
+		if p[1] < minY {
+			minY = p[1]
+		}
+		if p[1] > maxY {
+			maxY = p[1]
+		}
+	}
+	var sb strings.Builder
+	for y := minY; y <= maxY; y++ {
+		line := make([]rune, 0, maxX-minX+1)
+		for x := minX; x <= maxX; x++ {
+			if r, ok := g[[2]int{x, y}]; ok {
+				line = append(line, r)
+			} else {
+				line = append(line, ' ')
+			}
+		}
+		sb.WriteString(strings.TrimRight(string(line), " "))
+		sb.WriteByte('\n')
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
