@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"herdr-canvas/internal/canvas"
 )
+
+// New returns a Store rooted at the central store directory.
+func New() *Store { return &Store{} }
 
 // Dir returns the central store directory, honoring XDG_DATA_HOME and
 // falling back to ~/.local/share.
@@ -75,4 +79,27 @@ func validateName(name string) error {
 		return fmt.Errorf("invalid diagram name %q", name)
 	}
 	return nil
+}
+
+// List returns the names of all diagrams in the store, sorted.
+func (s *Store) List() ([]string, error) {
+	dir := filepath.Dir(s.Path("x"))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if name := strings.TrimSuffix(e.Name(), ".json"); name != e.Name() {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }

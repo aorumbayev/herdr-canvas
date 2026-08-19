@@ -1,0 +1,26 @@
+id = "herdr-canvas"
+name = "herdr-canvas"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Dead-simple ASCII diagram canvas"
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["go", "build", "-o", "bin/herdr-canvas", "./cmd/herdr-canvas"]
+
+# Install the prefix+d hotkey that opens the canvas in the current pane's cwd.
+# prefix+c is herdr's default new-tab binding, so we use prefix+d.
+[[build]]
+command = ["bin/herdr-canvas", "setup"]
+
+[[actions]]
+id = "open"
+title = "Open herdr-canvas diagram"
+contexts = ["workspace", "pane"]
+command = ["bin/herdr-canvas"]
+
+[[panes]]
+id = "canvas"
+title = "herdr-canvas"
+placement = "tab"
+command = ["./bin/herdr-canvas"]
