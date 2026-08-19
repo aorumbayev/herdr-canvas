@@ -8,7 +8,8 @@ platforms = ["linux", "macos"]
 [[build]]
 command = ["go", "build", "-o", "bin/herdr-canvas", "./cmd/herdr-canvas"]
 
-# Install the prefix+d hotkey that opens the canvas in the current pane's cwd.
+# Install the prefix+d hotkey that opens the canvas in a fresh tab using the
+# current pane's cwd.
 # prefix+c is herdr's default new-tab binding, so we use prefix+d.
 [[build]]
 command = ["bin/herdr-canvas", "setup"]
@@ -17,7 +18,7 @@ command = ["bin/herdr-canvas", "setup"]
 id = "open"
 title = "Open herdr-canvas diagram"
 contexts = ["workspace", "pane"]
-command = ["bin/herdr-canvas"]
+command = ["bin/herdr-canvas", "launch"]
 
 [[panes]]
 id = "canvas"

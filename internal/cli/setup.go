@@ -16,7 +16,7 @@ const keybindingBlock = `
 key = "prefix+d"
 type = "plugin_action"
 command = "herdr-canvas.open"
-description = "open the herdr-canvas diagram"
+description = "open the herdr-canvas diagram in a new tab"
 `
 
 const keybindingMarker = "herdr-canvas.open"
