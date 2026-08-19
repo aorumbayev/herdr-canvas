@@ -22,9 +22,9 @@ const (
 
 // Cell is one character at one (x, y) position, used by Freeform.
 type Cell struct {
-	X  int  `json:"x"`
-	Y  int  `json:"y"`
-	Ch byte `json:"ch"`
+	X  int    `json:"x"`
+	Y  int    `json:"y"`
+	Ch string `json:"ch"`
 }
 
 // Element is a single named entity in a Diagram. Fields are used per Type:

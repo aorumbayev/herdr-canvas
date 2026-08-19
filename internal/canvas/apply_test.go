@@ -72,7 +72,7 @@ func TestApplyTextCommitsAndRejectsEmpty(t *testing.T) {
 
 func TestApplyDrawCommitsFreeform(t *testing.T) {
 	d := &Diagram{}
-	cells := []Cell{{X: 0, Y: 0, Ch: '#'}, {X: 1, Y: 0, Ch: '#'}}
+	cells := []Cell{{X: 0, Y: 0, Ch: "#"}, {X: 1, Y: 0, Ch: "#"}}
 	if err := d.Apply(DrawCmd{Cells: cells}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
