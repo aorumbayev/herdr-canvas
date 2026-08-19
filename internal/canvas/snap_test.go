@@ -4,10 +4,10 @@ import "testing"
 
 func TestJunctionCrossAndTee(t *testing.T) {
 	cases := []struct {
-		existing, inc          rune
-		cross                  bool
-		sdcol, sdrow           int
-		want                   rune
+		existing, inc rune
+		cross         bool
+		sdcol, sdrow  int
+		want          rune
 	}{
 		{'|', '-', true, 0, 0, '┼'},
 		{'-', '|', true, 0, 0, '┼'},
