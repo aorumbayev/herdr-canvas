@@ -159,10 +159,30 @@ func run(m model) error {
 	return err
 }
 
-func (m model) Init() tea.Cmd { return nil }
+// pollEvery is how often the editor looks for a change an agent made. A stat
+// of one file is cheap, and the person watches the canvas while the agent
+// draws, so the picture must not wait for their next edit.
+const pollEvery = 400 * time.Millisecond
+
+// pollMsg asks the editor to look at the stored file again.
+type pollMsg struct{}
+
+func poll() tea.Cmd {
+	return tea.Tick(pollEvery, func(time.Time) tea.Msg { return pollMsg{} })
+}
+
+func (m model) Init() tea.Cmd { return poll() }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case pollMsg:
+		// An in-progress drag, keyboard anchor, or text entry holds state that
+		// points at the current elements. Reloading under it would move the
+		// ground the person is drawing on, so the poll waits.
+		if m.phase == phaseEdit && !m.busy() {
+			m.reloadIfChanged()
+		}
+		return m, poll()
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.ensureVisible()
@@ -508,6 +528,11 @@ func (m *model) apply(cmd canvas.Command) {
 
 // reloadIfChanged replaces the in-memory diagram when the stored file changed
 // since this session read it, so a CLI edit is not overwritten.
+// busy reports whether the person is part-way through an interaction.
+func (m model) busy() bool {
+	return m.mouse || m.anchored || m.typing || len(m.pending) > 0 || m.grabID != ""
+}
+
 func (m *model) reloadIfChanged() {
 	if m.d.Name == "" {
 		return

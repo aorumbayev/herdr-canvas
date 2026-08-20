@@ -626,3 +626,53 @@ func TestEscapeWhileTypingDoesNotLeaveTheEditor(t *testing.T) {
 		t.Error("still typing after escape")
 	}
 }
+
+func TestPollShowsAChangeAnAgentMade(t *testing.T) {
+	m := editor(t)
+	// The agent adds a box through the CLI while the person only watches.
+	d, err := m.s.Load("demo")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 4, Y2: 2}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if err := m.s.Save(d); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	next, cmd := m.Update(pollMsg{})
+	m = next.(model)
+	if cmd == nil {
+		t.Error("the poll did not schedule the next look")
+	}
+	if len(m.d.Elements) != 1 {
+		t.Fatalf("elements = %d, want the agent's box without the person drawing", len(m.d.Elements))
+	}
+	if !strings.Contains(m.status, "reloaded") {
+		t.Errorf("status = %q, want the reload reported", m.status)
+	}
+}
+
+func TestPollLeavesADragAlone(t *testing.T) {
+	m := editor(t)
+	m.tool = toolBox
+	m = send(t, m, left(2, 2, tea.MouseActionPress), left(6, 5, tea.MouseActionMotion))
+
+	d, _ := m.s.Load("demo")
+	_ = d.Apply(canvas.BoxCmd{X1: 20, Y1: 0, X2: 24, Y2: 2})
+	_ = m.s.Save(d)
+
+	next, cmd := m.Update(pollMsg{})
+	m = next.(model)
+	if cmd == nil {
+		t.Error("the poll did not schedule the next look")
+	}
+	// Reloading here would move the ground under an unfinished drag.
+	if len(m.d.Elements) != 0 {
+		t.Errorf("elements = %d, want the drag left alone", len(m.d.Elements))
+	}
+	if !m.mouse {
+		t.Error("the drag was cancelled by the poll")
+	}
+}

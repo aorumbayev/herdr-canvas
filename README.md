@@ -118,8 +118,10 @@ send herdr-canvas@main to which agent?   workspace: herdr-canvas
 Each row names the tab the way your tab bar names it, then the agent, its
 state, and its terminal title.
 
-You keep drawing while the agent works. The canvas reloads the file when the
-agent changes it, so you both look at the same diagram.
+You keep drawing while the agent works. The canvas looks at the file about
+twice a second and reloads it when the agent changes it, so the picture updates
+under your eyes. It waits while you hold a drag, type text, or hold a keyboard
+anchor, so a reload never moves the ground you draw on.
 
 ## Let your agent edit the diagram
 
