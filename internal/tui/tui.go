@@ -97,17 +97,20 @@ type model struct {
 	panStart      [2]int
 	panOrigin     [2]int
 
-	tool     tool
-	cursor   [2]int
-	mouse    bool
-	anchored bool
-	anchor   [2]int
-	grabID   string
-	pending  []canvas.Cell
-	typing   bool
-	textPos  [2]int
-	textBuf  string
-	status   string
+	tool          tool
+	cursor        [2]int
+	mouse         bool
+	anchored      bool
+	anchor        [2]int
+	grabID        string
+	pending       []canvas.Cell
+	typing        bool
+	textPos       [2]int
+	textBuf       string
+	editID        string
+	lastClickCell [2]int
+	lastClickAt   time.Time
+	status        string
 
 	send      sender
 	workspace string
@@ -120,7 +123,7 @@ type model struct {
 func Run(cwd string) error {
 	s := store.New()
 	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox, width: defaultW, height: defaultH,
-		vp:   viewport{zoom: 1},
+		vp:   viewport{zoom: 10},
 		send: herdr.New(), workspace: herdr.Workspace()}
 
 	nm, err := name.Composite(cwd)
@@ -165,7 +168,7 @@ func RunNamed(n string) error {
 	return run(model{
 		s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox,
 		width: defaultW, height: defaultH,
-		vp: viewport{zoom: 1},
+		vp: viewport{zoom: 10},
 	})
 }
 
@@ -335,12 +338,11 @@ func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
-		m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
-		m.typing = false
-		m.textBuf = ""
+		m.commitTyping()
 	case "esc":
 		m.typing = false
 		m.textBuf = ""
+		m.editID = ""
 	case "backspace":
 		if len(m.textBuf) > 0 {
 			m.textBuf = m.textBuf[:len(m.textBuf)-1]
@@ -362,10 +364,10 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.doRedo()
 		return nil
 	case bkey.Matches(msg, keyZoomIn):
-		m.vp.setZoom(2)
+		m.vp.zoomIn()
 		return nil
 	case bkey.Matches(msg, keyZoomOut):
-		m.vp.setZoom(1)
+		m.vp.zoomOut()
 		return nil
 	}
 	switch msg.String() {
@@ -406,9 +408,9 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 		}
 		if ev.Mod.Contains(tea.ModCtrl) {
 			if ev.Button == tea.MouseWheelUp {
-				m.vp.setZoom(2)
+				m.vp.zoomIn()
 			} else if ev.Button == tea.MouseWheelDown {
-				m.vp.setZoom(1)
+				m.vp.zoomOut()
 			}
 			return nil
 		}
@@ -443,19 +445,36 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 		if m.typing && ev.Button == tea.MouseLeft && ev.Y == m.height-1 {
 			return m.chromeClick(ev.X, ev.Y)
 		}
-		if m.typing {
+		p, on := m.canvasPoint(ev.X, ev.Y)
+		if m.typing && ev.Button == tea.MouseLeft {
+			if on && m.inTextBuffer(p) {
+				return nil
+			}
+			m.commitTyping()
 			return nil
+		}
+		if ev.Button == tea.MouseLeft && on && m.tool == toolText {
+			if e := m.d.ElementAt(p[0], p[1]); e != nil && e.Type == canvas.Text {
+				dbl := m.isDoubleClick(p)
+				if dbl || (m.typing && m.textBuf == "" && m.textPos == p && m.editID == "") {
+					m.startTextEdit(e)
+					return nil
+				}
+				if m.typing && !m.inTextBuffer(p) {
+					m.commitTyping()
+				}
+				return nil
+			}
 		}
 		m.status = ""
 		return m.mouseMsg(msg)
 	case tea.MouseMotionMsg:
-		if m.panning && ev.Button == tea.MouseMiddle {
-			z := m.vp.zoom
-			if z < 1 {
-				z = 1
-			}
-			m.vp.origin[0] = max(0, m.panOrigin[0]-(ev.X-m.panStart[0])/z)
-			m.vp.origin[1] = max(0, m.panOrigin[1]-(ev.Y-m.panStart[1])/z)
+		if m.panning {
+			t := m.vp.tenths()
+			dx := (ev.X - m.panStart[0]) * 10 / t
+			dy := (ev.Y - m.panStart[1]) * 10 / t
+			m.vp.origin[0] = max(0, m.panOrigin[0]-dx)
+			m.vp.origin[1] = max(0, m.panOrigin[1]-dy)
 			return nil
 		}
 		if m.typing {
@@ -491,16 +510,16 @@ func (m *model) chromeClick(x, y int) tea.Cmd {
 	case chipSend:
 		m.startSend()
 	case chipZoom:
-		m.vp.fit(m.d.Elements, m.width, m.canvasHeight())
+		m.vp.setZoom(zoom1)
+	case chipRecenter:
+		m.vp.recenter(m.d.Elements, m.width, m.canvasHeight())
 	}
 	return nil
 }
 
 func (m *model) switchTool(t tool) {
 	if m.typing {
-		m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
-		m.typing = false
-		m.textBuf = ""
+		m.commitTyping()
 	}
 	m.tool = t
 	m.grabID = ""
@@ -688,11 +707,7 @@ func (m *model) doRedo() {
 
 func (m *model) discardInFlight() bool {
 	if m.typing {
-		if m.textBuf != "" {
-			m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
-		}
-		m.typing = false
-		m.textBuf = ""
+		m.commitTyping()
 		return true
 	}
 	if m.mouse || m.anchored || len(m.pending) > 0 || m.grabID != "" {
@@ -711,6 +726,52 @@ func (m *model) discardInFlight() bool {
 // busy reports whether the person is part-way through an interaction.
 func (m model) busy() bool {
 	return m.mouse || m.anchored || m.typing || len(m.pending) > 0 || m.grabID != ""
+}
+
+func (m model) inTextBuffer(p [2]int) bool {
+	if !m.typing {
+		return false
+	}
+	n := len([]rune(m.textBuf))
+	return p[1] == m.textPos[1] && p[0] >= m.textPos[0] && p[0] <= m.textPos[0]+n
+}
+
+func (m *model) isDoubleClick(p [2]int) bool {
+	ok := m.lastClickCell == p && time.Since(m.lastClickAt) < 400*time.Millisecond
+	m.lastClickCell = p
+	m.lastClickAt = time.Now()
+	return ok
+}
+
+func (m *model) startTextEdit(e *canvas.Element) {
+	if m.typing {
+		if m.editID != e.ID || m.textBuf != e.Text {
+			m.commitTyping()
+		}
+	}
+	m.tool = toolText
+	m.editID = e.ID
+	m.textPos = [2]int{e.X, e.Y}
+	m.textBuf = e.Text
+	m.typing = true
+}
+
+func (m *model) commitTyping() {
+	if !m.typing {
+		return
+	}
+	if m.textBuf == "" {
+		if m.editID != "" {
+			m.apply(canvas.DeleteCmd{ID: m.editID})
+		}
+	} else if m.editID != "" {
+		m.apply(canvas.TextSetCmd{ID: m.editID, Text: m.textBuf})
+	} else {
+		m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
+	}
+	m.typing = false
+	m.textBuf = ""
+	m.editID = ""
 }
 
 func (m *model) reloadIfChanged() {
@@ -940,6 +1001,15 @@ func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 		elems = m.movePreview(elems)
 	}
 	if m.typing {
+		if m.editID != "" {
+			filtered := elems[:0]
+			for _, e := range elems {
+				if e.ID != m.editID {
+					filtered = append(filtered, e)
+				}
+			}
+			elems = filtered
+		}
 		elems = append(elems, canvas.Element{Type: canvas.Text, X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
 		elems = append(elems, canvas.Element{Type: canvas.Freeform, Cells: []canvas.Cell{{
 			X: m.textPos[0] + len([]rune(m.textBuf)), Y: m.textPos[1], Ch: cursorGlyph,

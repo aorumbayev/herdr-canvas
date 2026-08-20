@@ -24,7 +24,7 @@ func editor(t *testing.T) model {
 		t.Fatalf("ModTime: %v", err)
 	}
 	return model{s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox, width: 40, height: 12,
-		vp: viewport{zoom: 1}}
+		vp: viewport{zoom: 10}}
 }
 
 func send(t *testing.T, m model, msgs ...tea.Msg) model {
@@ -120,8 +120,8 @@ func TestEnsureVisibleMovesOrigin(t *testing.T) {
 		cursor [2]int
 		want   [2]int
 	}{
-		{"1x right and down", 1, [2]int{50, 15}, [2]int{11, 6}},
-		{"2x right and down", 2, [2]int{25, 8}, [2]int{6, 4}},
+		{"1x right and down", 10, [2]int{50, 15}, [2]int{11, 6}},
+		{"2x right and down", 20, [2]int{25, 8}, [2]int{6, 4}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -183,6 +183,18 @@ func TestMiddleDragPansAndDoesNotDraw(t *testing.T) {
 	}
 }
 
+func TestMiddleDragPansWhenMotionDropsButton(t *testing.T) {
+	m := editor(t)
+	n := len(m.d.Elements)
+	m = send(t, m, midDown(8, 4), tea.MouseMotionMsg{X: 5, Y: 2}, midUp(5, 2))
+	if len(m.d.Elements) != n {
+		t.Fatalf("pan mutated the diagram")
+	}
+	if m.vp.origin == [2]int{0, 0} {
+		t.Fatal("origin did not move")
+	}
+}
+
 func TestWheelPansCanvasNotFooter(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
@@ -201,35 +213,43 @@ func TestWheelPansCanvasNotFooter(t *testing.T) {
 	}
 }
 
-func TestCtrlWheelSetsZoomWithoutPan(t *testing.T) {
+func TestCtrlWheelStepsZoom(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
 	m = send(t, m, wheelAt(2, 3, tea.MouseWheelUp, tea.ModCtrl))
-	if m.vp.zoom != 2 {
-		t.Errorf("zoom = %d, want 2", m.vp.zoom)
+	if m.vp.zoom != 15 {
+		t.Errorf("zoom = %d, want 15", m.vp.zoom)
 	}
 	if m.vp.origin != [2]int{0, 0} {
 		t.Errorf("ctrl+wheel panned: %v", m.vp.origin)
 	}
 	m = send(t, m, wheelAt(2, 3, tea.MouseWheelUp, tea.ModCtrl))
-	if m.vp.zoom != 2 {
-		t.Errorf("second zoom-in toggled: %d", m.vp.zoom)
+	if m.vp.zoom != 20 {
+		t.Errorf("zoom = %d, want 20", m.vp.zoom)
+	}
+	m = send(t, m, wheelAt(2, 3, tea.MouseWheelUp, tea.ModCtrl))
+	if m.vp.zoom != 20 {
+		t.Errorf("zoom-in wrapped: %d", m.vp.zoom)
 	}
 	m = send(t, m, wheelAt(2, 3, tea.MouseWheelDown, tea.ModCtrl))
-	if m.vp.zoom != 1 {
-		t.Errorf("zoom-out = %d, want 1", m.vp.zoom)
+	if m.vp.zoom != 15 {
+		t.Errorf("zoom-out = %d, want 15", m.vp.zoom)
 	}
 }
 
-func TestPlusMinusZoom(t *testing.T) {
+func TestPlusMinusStepsZoom(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.KeyPressMsg{Code: '+', Text: "+"})
-	if m.vp.zoom != 2 {
+	if m.vp.zoom != 15 {
 		t.Errorf("zoom = %d after +", m.vp.zoom)
 	}
 	m = send(t, m, tea.KeyPressMsg{Code: '-', Text: "-"})
-	if m.vp.zoom != 1 {
+	if m.vp.zoom != 10 {
 		t.Errorf("zoom = %d after -", m.vp.zoom)
+	}
+	m = send(t, m, tea.KeyPressMsg{Code: '-', Text: "-"})
+	if m.vp.zoom != 5 {
+		t.Errorf("zoom = %d after second -, want 5", m.vp.zoom)
 	}
 }
 
@@ -411,24 +431,43 @@ func TestClickPaddingDoesNotSwitchTool(t *testing.T) {
 	}
 }
 
-func TestClickZoomChipFits(t *testing.T) {
+func TestClickZoomChipResetsZoomOnly(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
 	if err := m.d.Apply(canvas.BoxCmd{X1: 80, Y1: 40, X2: 90, Y2: 50}); err != nil {
 		t.Fatal(err)
 	}
-	m.vp.zoom = 2
+	m.vp.zoom = 20
+	m.vp.origin = [2]int{3, 3}
 	ch := layoutChrome(40, m.d.Name, m.vp.zoom, m.cursor, m.tool, false, false, "")
 	idx := indexOf(ch.header, "2x")
+	m = send(t, m, leftDown(idx, 0), leftUp(idx, 0))
+	if m.vp.zoom != 10 {
+		t.Errorf("zoom = %d, want 10", m.vp.zoom)
+	}
+	if m.vp.origin != [2]int{3, 3} {
+		t.Errorf("reset panned: %v", m.vp.origin)
+	}
+}
+
+func TestClickRecenterCentersSmallBox(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
+	if err := m.d.Apply(canvas.BoxCmd{X1: 2, Y1: 2, X2: 4, Y2: 3}); err != nil {
+		t.Fatal(err)
+	}
+	m.vp.origin = [2]int{20, 20}
+	ch := layoutChrome(40, m.d.Name, m.vp.zoom, m.cursor, m.tool, false, false, "")
+	idx := indexOf(ch.header, "recenter")
 	if idx < 0 {
 		t.Fatalf("header %q", ch.header)
 	}
 	m = send(t, m, leftDown(idx, 0), leftUp(idx, 0))
-	if m.vp.zoom != 1 {
-		t.Errorf("zoom = %d, want 1", m.vp.zoom)
+	if m.vp.zoom != 10 {
+		t.Errorf("recenter changed zoom: %d", m.vp.zoom)
 	}
-	if m.vp.origin[0] != 80 || m.vp.origin[1] != 40 {
-		t.Errorf("origin = %v, want bbox min", m.vp.origin)
+	if m.vp.origin[0] == 20 && m.vp.origin[1] == 20 {
+		t.Fatal("origin did not move")
 	}
 }
 
@@ -930,6 +969,59 @@ func TestUndoDuringBoxDragDiscardsPreview(t *testing.T) {
 	}
 	if len(m.d.Elements) != 0 {
 		t.Errorf("discard undid committed work: %+v", m.d.Elements)
+	}
+}
+
+func TestClickOutsideCommitsText(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("h"), key("i"), leftDown(10, 5), leftUp(10, 5))
+	if m.typing {
+		t.Fatal("still typing")
+	}
+	if len(m.d.Elements) != 1 || m.d.Elements[0].Text != "hi" {
+		t.Fatalf("commit = %+v", m.d.Elements)
+	}
+	if m.d.Elements[0].X != 3 || m.d.Elements[0].Y != 1 {
+		t.Errorf("text pos = %d,%d", m.d.Elements[0].X, m.d.Elements[0].Y)
+	}
+}
+
+func TestClickOutsideEmptyDoesNotWrite(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), leftDown(10, 5), leftUp(10, 5))
+	if m.typing {
+		t.Fatal("still typing")
+	}
+	if len(m.d.Elements) != 0 {
+		t.Errorf("empty commit wrote %+v", m.d.Elements)
+	}
+}
+
+func TestClickOutsideDoesNotStartNewText(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("a"), leftDown(10, 5), leftUp(10, 5))
+	if m.typing {
+		t.Fatal("click-outside started a new buffer")
+	}
+}
+
+func TestDoubleClickTextEntersEditAndKeepsID(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.TextCmd{X: 3, Y: 1, Text: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	m.tool = toolText
+	// canvas cell (3,1) is terminal (3, 1+headerRows) = (3,2)
+	m = send(t, m, leftDown(3, 2), leftUp(3, 2), leftDown(3, 2), leftUp(3, 2))
+	if !m.typing || m.textBuf != "hi" || m.editID != "t1" {
+		t.Fatalf("edit typing=%v buf=%q id=%q", m.typing, m.textBuf, m.editID)
+	}
+	m = send(t, m, key("!"), key("enter"))
+	if len(m.d.Elements) != 1 || m.d.Elements[0].ID != "t1" || m.d.Elements[0].Text != "hi!" {
+		t.Errorf("after edit %+v", m.d.Elements)
 	}
 }
 

@@ -89,6 +89,18 @@ func (d *Diagram) Apply(cmd Command) error {
 			return err
 		}
 		e.Label = c.Label
+	case TextSetCmd:
+		e, err := d.find(c.ID)
+		if err != nil {
+			return err
+		}
+		if e.Type != Text {
+			return fmt.Errorf("textset %s: not text", c.ID)
+		}
+		if c.Text == "" {
+			return fmt.Errorf("textset %s: text must be non-empty", c.ID)
+		}
+		e.Text = c.Text
 	default:
 		return fmt.Errorf("unsupported command %T", cmd)
 	}

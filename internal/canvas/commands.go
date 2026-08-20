@@ -46,10 +46,18 @@ type LabelCmd struct {
 	Label string
 }
 
-func (BoxCmd) command()    {}
-func (LineCmd) command()   {}
-func (TextCmd) command()   {}
-func (DrawCmd) command()   {}
-func (MoveCmd) command()   {}
-func (DeleteCmd) command() {}
-func (LabelCmd) command()  {}
+// TextSetCmd replaces the string on an existing Text element. It does not
+// move the element or change its id.
+type TextSetCmd struct {
+	ID   string
+	Text string
+}
+
+func (BoxCmd) command()     {}
+func (LineCmd) command()    {}
+func (TextCmd) command()    {}
+func (DrawCmd) command()    {}
+func (MoveCmd) command()    {}
+func (DeleteCmd) command()  {}
+func (LabelCmd) command()   {}
+func (TextSetCmd) command() {}

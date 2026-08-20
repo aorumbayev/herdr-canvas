@@ -3,7 +3,7 @@ package tui
 import "testing"
 
 func TestChromeHitArrowSetsTool(t *testing.T) {
-	ch := layoutChrome(80, "demo", 1, [2]int{4, 2}, toolBox, true, true, "")
+	ch := layoutChrome(80, "demo", 10, [2]int{4, 2}, toolBox, true, true, "")
 	idx := indexOf(ch.footer, "arrow")
 	if idx < 0 {
 		t.Fatalf("footer %q has no arrow", ch.footer)
@@ -15,14 +15,14 @@ func TestChromeHitArrowSetsTool(t *testing.T) {
 }
 
 func TestChromePaddingIsAMiss(t *testing.T) {
-	ch := layoutChrome(80, "demo", 1, [2]int{0, 0}, toolBox, true, true, "")
+	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
 	if _, ok := ch.hit(0, 5, 80, 12); ok {
 		t.Fatal("canvas row must miss chrome")
 	}
 }
 
 func TestChromeDimUndoDoesNotHitUndo(t *testing.T) {
-	ch := layoutChrome(80, "demo", 1, [2]int{0, 0}, toolBox, false, false, "")
+	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, false, false, "")
 	idx := indexOf(ch.footer, "undo")
 	if idx < 0 {
 		t.Fatalf("footer %q", ch.footer)
@@ -34,25 +34,25 @@ func TestChromeDimUndoDoesNotHitUndo(t *testing.T) {
 }
 
 func TestChromeNarrowDropsSendThenUndo(t *testing.T) {
-	wide := layoutChrome(80, "demo", 1, [2]int{0, 0}, toolBox, true, true, "")
+	wide := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
 	if indexOf(wide.footer, "send") < 0 {
 		t.Fatalf("wide footer %q", wide.footer)
 	}
-	mid := layoutChrome(36, "demo", 1, [2]int{0, 0}, toolBox, true, true, "")
+	mid := layoutChrome(36, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
 	if indexOf(mid.footer, "send") >= 0 {
 		t.Errorf("mid footer still has send: %q", mid.footer)
 	}
 	if indexOf(mid.footer, "undo") >= 0 {
 		t.Errorf("mid footer still has undo: %q", mid.footer)
 	}
-	tiny := layoutChrome(20, "demo", 1, [2]int{0, 0}, toolBox, true, true, "")
+	tiny := layoutChrome(20, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
 	if indexOf(tiny.footer, "box") >= 0 && indexOf(tiny.footer, "b ") < 0 && indexOf(tiny.footer, "b l") < 0 {
 		t.Errorf("tiny footer was not shortened: %q", tiny.footer)
 	}
 }
 
 func TestChromeZoomHitUsesRuneColumns(t *testing.T) {
-	ch := layoutChrome(30, "日本語", 1, [2]int{4, 2}, toolBox, true, true, "")
+	ch := layoutChrome(30, "日本語", 10, [2]int{4, 2}, toolBox, true, true, "")
 	zx := lastIndexOfRunes(ch.header, "1x")
 	if zx < 0 {
 		t.Fatalf("header %q has no 1x", ch.header)
@@ -76,8 +76,32 @@ func TestChromeZoomHitUsesRuneColumns(t *testing.T) {
 	}
 }
 
+func TestChromeHeaderHasRecenter(t *testing.T) {
+	ch := layoutChrome(80, "demo", 10, [2]int{4, 2}, toolBox, true, true, "")
+	if indexOf(ch.header, "1x") < 0 || indexOf(ch.header, "recenter") < 0 {
+		t.Fatalf("header %q", ch.header)
+	}
+	idx := indexOf(ch.header, "recenter")
+	hit, ok := ch.hit(idx, 0, 80, 12)
+	if !ok || hit.kind != chipRecenter {
+		t.Errorf("hit = %+v ok=%v, want chipRecenter", hit, ok)
+	}
+}
+
+func TestChromeFooterGroupIsCentered(t *testing.T) {
+	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
+	idx := indexOf(ch.footer, "[box]")
+	if idx < 1 {
+		t.Fatalf("footer still left-aligned: %q", ch.footer)
+	}
+	hit, ok := ch.hit(idx, 11, 80, 12)
+	if !ok || hit.tool != toolBox {
+		t.Errorf("centered [box] miss: %+v ok=%v", hit, ok)
+	}
+}
+
 func TestChromeBadgeDoesNotDropChipsAtWidth80(t *testing.T) {
-	ch := layoutChrome(80, "demo", 1, [2]int{0, 0}, toolBox, true, true, "13x5")
+	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "13x5")
 	if indexOf(ch.footer, "send") < 0 {
 		t.Errorf("footer with badge dropped send: %q", ch.footer)
 	}

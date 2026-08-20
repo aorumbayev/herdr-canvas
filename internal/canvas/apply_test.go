@@ -181,6 +181,42 @@ func TestApplyRejectsMoveOffCanvas(t *testing.T) {
 	}
 }
 
+func TestApplyTextSetRewritesAndKeepsID(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(TextCmd{X: 1, Y: 2, Text: "hi"}); err != nil {
+		t.Fatalf("TextCmd: %v", err)
+	}
+	if err := d.Apply(TextSetCmd{ID: "t1", Text: "hello"}); err != nil {
+		t.Fatalf("TextSetCmd: %v", err)
+	}
+	if len(d.Elements) != 1 {
+		t.Fatalf("elements = %d", len(d.Elements))
+	}
+	e := d.Elements[0]
+	if e.ID != "t1" || e.Text != "hello" || e.X != 1 || e.Y != 2 {
+		t.Errorf("element = %+v", e)
+	}
+}
+
+func TestApplyTextSetRejectsEmptyAndNonText(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(TextCmd{X: 0, Y: 0, Text: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Apply(BoxCmd{X1: 0, Y1: 1, X2: 2, Y2: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Apply(TextSetCmd{ID: "t1", Text: ""}); err == nil {
+		t.Fatal("empty TextSetCmd must fail")
+	}
+	if err := d.Apply(TextSetCmd{ID: "b1", Text: "no"}); err == nil {
+		t.Fatal("TextSetCmd on a box must fail")
+	}
+	if err := d.Apply(TextSetCmd{ID: "nope", Text: "x"}); err == nil {
+		t.Fatal("missing id must fail")
+	}
+}
+
 func TestApplyMoveTouchesOnlyTypeFields(t *testing.T) {
 	d := &Diagram{}
 	if err := d.Apply(BoxCmd{X1: 1, Y1: 1, X2: 3, Y2: 3}); err != nil {

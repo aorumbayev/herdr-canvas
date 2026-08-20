@@ -14,6 +14,7 @@ const (
 	chipRedo
 	chipSend
 	chipZoom
+	chipRecenter
 )
 
 type chip struct {
@@ -42,8 +43,8 @@ func layoutChrome(width int, name string, zoom int, cursor [2]int, active tool, 
 	if width < 1 {
 		width = 1
 	}
-	zoomLabel := fmt.Sprintf("%dx", zoom)
-	right := fmt.Sprintf("%s  (%d,%d)", zoomLabel, cursor[0], cursor[1])
+	zoomLabel := formatZoom(zoom)
+	right := fmt.Sprintf("%s  recenter  (%d,%d)", zoomLabel, cursor[0], cursor[1])
 	left := name
 	leftW := len([]rune(left))
 	rightW := len([]rune(right))
@@ -66,6 +67,11 @@ func layoutChrome(width int, name string, zoom int, cursor [2]int, active tool, 
 	if zx >= 0 {
 		zw := len([]rune(zoomLabel))
 		ch.chips = append(ch.chips, chip{kind: chipZoom, x0: zx, x1: zx + zw, row: 0, enabled: true})
+	}
+	rx := lastIndexOfRunes(header, "recenter")
+	if rx >= 0 {
+		rw := len([]rune("recenter"))
+		ch.chips = append(ch.chips, chip{kind: chipRecenter, x0: rx, x1: rx + rw, row: 0, enabled: true})
 	}
 
 	full := []chipSpec{
@@ -110,7 +116,7 @@ func layoutChrome(width int, name string, zoom int, cursor [2]int, active tool, 
 		}
 	}
 
-	footer, chips := renderFooter(specs, active, badge, width)
+	footer, chips := renderFooter(specs, active, badge, width, true)
 	for i := range chips {
 		chips[i].row = 1
 	}
@@ -130,15 +136,21 @@ func dropGroup(in []chipSpec, group int) []chipSpec {
 }
 
 func fits(specs []chipSpec, width int, active tool, badge string) bool {
-	s, _ := renderFooter(specs, active, "", 1<<30)
-	chipWidth := len([]rune(s))
-	if badge != "" {
-		chipWidth += 1 + len([]rune(badge))
+	_, chips := renderFooter(specs, active, "", 1<<30, false)
+	groupW := 0
+	if len(chips) > 0 {
+		groupW = chips[len(chips)-1].x1
 	}
-	return chipWidth <= width
+	if groupW > width {
+		return false
+	}
+	if badge != "" {
+		groupW += 1 + len([]rune(badge))
+	}
+	return groupW <= width
 }
 
-func renderFooter(specs []chipSpec, active tool, badge string, width int) (string, []chip) {
+func renderFooter(specs []chipSpec, active tool, badge string, width int, center bool) (string, []chip) {
 	var b strings.Builder
 	var chips []chip
 	x := 0
@@ -161,15 +173,22 @@ func renderFooter(specs []chipSpec, active tool, badge string, width int) (strin
 		x += len([]rune(label))
 		chips = append(chips, chip{kind: s.kind, tool: s.tool, x0: start, x1: x, enabled: s.enabled})
 	}
-	if badge != "" {
-		pad := width - x - 1 - len([]rune(badge))
-		if pad < 1 {
-			pad = 1
+	groupW := x
+	leftPad := 0
+	if center {
+		leftPad = (width - groupW) / 2
+		if leftPad < 0 {
+			leftPad = 0
 		}
-		b.WriteString(strings.Repeat(" ", pad))
-		b.WriteString(badge)
+		for i := range chips {
+			chips[i].x0 += leftPad
+			chips[i].x1 += leftPad
+		}
 	}
-	out := b.String()
+	out := strings.Repeat(" ", leftPad) + b.String()
+	if badge != "" && leftPad+groupW+1+len([]rune(badge)) <= width {
+		out += " " + badge
+	}
 	if w := len([]rune(out)); w > width {
 		out = string([]rune(out)[:width])
 	}
@@ -224,6 +243,19 @@ func lastIndexOfRunes(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+func formatZoom(tenths int) string {
+	switch tenths {
+	case zoom05:
+		return "0.5x"
+	case zoom15:
+		return "1.5x"
+	case zoom2:
+		return "2x"
+	default:
+		return "1x"
+	}
 }
 
 func truncate(s string, n int) string {
