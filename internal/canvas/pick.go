@@ -16,7 +16,8 @@ func (e *Element) covers(x, y int) bool {
 	case Box:
 		return x >= e.X1 && x <= e.X2 && y >= e.Y1 && y <= e.Y2
 	case Line:
-		for _, p := range bresenham(e.X1, e.Y1, e.X2, e.Y2) {
+		pts, _ := elbow(e.X1, e.Y1, e.X2, e.Y2)
+		for _, p := range pts {
 			if p == [2]int{x, y} {
 				return true
 			}

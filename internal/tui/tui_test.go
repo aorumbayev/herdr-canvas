@@ -267,3 +267,112 @@ func TestViewFillsTheTerminal(t *testing.T) {
 		t.Errorf("last line = %q, want the status line", lines[11])
 	}
 }
+
+// canvasLine returns one rendered canvas row of the editor view. Row 0 is the
+// first row below the header.
+func canvasLine(t *testing.T, m model, row int) string {
+	t.Helper()
+	lines := strings.Split(m.View(), "\n")
+	if row+headerRows >= len(lines) {
+		t.Fatalf("row %d is outside the view (%d lines)", row, len(lines))
+	}
+	return lines[row+headerRows]
+}
+
+func TestMoveDragPreviewsLiveAndLeavesAGhost(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	m.tool = toolMove
+	m = send(t, m, left(1, 1, tea.MouseActionPress), left(6, 1, tea.MouseActionMotion))
+
+	if m.d.Elements[0].X1 != 0 {
+		t.Errorf("the drag mutated the diagram before release: %+v", m.d.Elements[0])
+	}
+	ghost := strings.Repeat(ghostGlyph, 3)
+	if got, want := canvasLine(t, m, 0), ghost+"  +-+"; got != want {
+		t.Errorf("row 0 = %q, want %q (ghost at the source, box under the cursor)", got, want)
+	}
+
+	m = send(t, m, left(6, 1, tea.MouseActionRelease))
+	if got := m.d.Elements[0].X1; got != 5 {
+		t.Errorf("after release x1 = %d, want 5", got)
+	}
+	if got, want := canvasLine(t, m, 0), "     +-+"; got != want {
+		t.Errorf("row 0 = %q, want %q — the ghost must not survive the commit", got, want)
+	}
+}
+
+func TestTextRendersAtTheClickedCellWhileTyping(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, left(3, 2, tea.MouseActionPress), key("h"), key("i"))
+
+	if len(m.d.Elements) != 0 {
+		t.Fatalf("typing committed early: %+v", m.d.Elements)
+	}
+	row := canvasLine(t, m, 1)
+	if want := "   hi" + cursorGlyph; row != want {
+		t.Errorf("row = %q, want %q", row, want)
+	}
+	if strings.Contains(m.statusLine(), "hi") {
+		t.Errorf("the buffer is still echoed in the status line: %q", m.statusLine())
+	}
+
+	m = send(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if len(m.d.Elements) != 1 || m.d.Elements[0].Text != "hi" {
+		t.Fatalf("enter did not commit the text: %+v", m.d.Elements)
+	}
+	if got := canvasLine(t, m, 1); got != "   hi" {
+		t.Errorf("committed row = %q, want %q", got, "   hi")
+	}
+}
+
+func TestTextEscapeDiscardsTheInPlacePreview(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, left(3, 2, tea.MouseActionPress), key("h"), tea.KeyMsg{Type: tea.KeyEsc})
+	if len(m.d.Elements) != 0 {
+		t.Fatalf("escape committed text: %+v", m.d.Elements)
+	}
+	if got := canvasLine(t, m, 1); strings.TrimSpace(got) != "" {
+		t.Errorf("row = %q, want empty after escape", got)
+	}
+}
+
+func TestLineToolRoutesAsAnElbow(t *testing.T) {
+	cases := []struct {
+		name     string
+		to       [2]int
+		wantRows []string
+	}{
+		{name: "a diagonal drag bends", to: [2]int{4, 3}, wantRows: []string{"|", "|", "|", "└----"}},
+		{name: "a horizontal drag stays one straight run", to: [2]int{4, 0}, wantRows: []string{"-----"}},
+		{name: "a vertical drag stays one straight run", to: [2]int{0, 3}, wantRows: []string{"|", "|", "|", "|"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := editor(t)
+			m.tool = toolLine
+			m = send(t, m,
+				left(0, headerRows, tea.MouseActionPress),
+				left(c.to[0], c.to[1]+headerRows, tea.MouseActionMotion),
+			)
+			for i, want := range c.wantRows {
+				if got := canvasLine(t, m, i); got != want {
+					t.Errorf("preview row %d = %q, want %q", i, got, want)
+				}
+			}
+			m = send(t, m, left(c.to[0], c.to[1]+headerRows, tea.MouseActionRelease))
+			if len(m.d.Elements) != 1 || m.d.Elements[0].Type != canvas.Line {
+				t.Fatalf("elements = %+v, want one line", m.d.Elements)
+			}
+			for i, want := range c.wantRows {
+				if got := canvasLine(t, m, i); got != want {
+					t.Errorf("committed row %d = %q, want %q", i, got, want)
+				}
+			}
+		})
+	}
+}

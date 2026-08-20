@@ -58,6 +58,13 @@ Everything spatial is allowed: nesting, overlap, crossing lines, dangling
 lines. Cell conflicts resolve by z-order; crossing lines render junction
 glyphs (`┼`, `├`, `┤`, `┬`, `┴`).
 
+## Line routing
+
+A line is orthogonal. The line runs on the y axis from (x1,y1) to y2, then on
+the x axis to x2. The bend gets a corner glyph (`└`, `┘`, `┌`, `┐`). A line
+with x1 = x2 or y1 = y2 stays one straight run and has no bend. An arrow
+places an arrowhead (`►`, `◄`, `▲`, `▼`) on the end that `--arrow` names.
+
 ## JSON schema
 
 ```json

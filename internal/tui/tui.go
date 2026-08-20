@@ -50,6 +50,13 @@ const (
 	defaultH   = 24
 )
 
+// cursorGlyph marks the insertion point of the text tool. ghostGlyph marks the
+// place a dragged element came from.
+const (
+	cursorGlyph = "█"
+	ghostGlyph  = "·"
+)
+
 type model struct {
 	s     *store.Store
 	d     *canvas.Diagram
@@ -347,6 +354,7 @@ func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
 			m.textPos = m.cursor
 			m.textBuf = ""
 			m.typing = true
+			m.mouse = false // the release arrives while typing and is dropped
 		}
 	case tea.MouseActionMotion:
 		if m.tool == toolDraw && m.mouse {
@@ -533,7 +541,7 @@ func (m model) View() string {
 
 func (m model) editView() string {
 	g := m.d.Render()
-	if m.mouse || m.anchored || len(m.pending) > 0 {
+	if m.mouse || m.anchored || m.typing || len(m.pending) > 0 {
 		g = m.overlayPreview(g)
 	}
 	var b strings.Builder
@@ -543,6 +551,45 @@ func (m model) editView() string {
 	b.WriteString("\n")
 	b.WriteString(m.statusLine())
 	return b.String()
+}
+
+// movePreview replaces the grabbed element with a copy at the dragged offset,
+// and leaves a ghost outline where the element came from.
+func (m model) movePreview(elems []canvas.Element) []canvas.Element {
+	dx, dy := m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1]
+	out := make([]canvas.Element, 0, len(elems)+1)
+	var grabbed canvas.Element
+	found := false
+	for _, e := range elems {
+		if e.ID == m.grabID {
+			grabbed, found = e, true
+			continue
+		}
+		out = append(out, e)
+	}
+	if !found {
+		return elems
+	}
+	moved, err := canvas.Translate(grabbed, dx, dy)
+	if err != nil {
+		return elems
+	}
+	if dx != 0 || dy != 0 {
+		out = append(out, canvas.Element{Type: canvas.Freeform, Cells: ghostCells(grabbed)})
+	}
+	return append(out, moved)
+}
+
+// ghostCells renders one element on its own and returns its cells as the ghost
+// glyph, so the preview can show where a dragged element came from.
+func ghostCells(e canvas.Element) []canvas.Cell {
+	d := canvas.Diagram{Elements: []canvas.Element{e}}
+	g := d.Render()
+	cells := make([]canvas.Cell, 0, len(g))
+	for p := range g {
+		cells = append(cells, canvas.Cell{X: p[0], Y: p[1], Ch: ghostGlyph})
+	}
+	return cells
 }
 
 func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
@@ -560,20 +607,31 @@ func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 		start, end := m.snap(m.anchor), m.snap(m.cursor)
 		elems = append(elems, canvas.Element{Type: canvas.Line, X1: start[0], Y1: start[1], X2: end[0], Y2: end[1]})
 	}
+	if m.tool == toolMove && m.grabID != "" {
+		elems = m.movePreview(elems)
+	}
+	if m.typing {
+		elems = append(elems, canvas.Element{Type: canvas.Text, X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
+		elems = append(elems, canvas.Element{Type: canvas.Freeform, Cells: []canvas.Cell{{
+			X: m.textPos[0] + len([]rune(m.textBuf)), Y: m.textPos[1], Ch: cursorGlyph,
+		}}})
+	}
 	tmp := canvas.Diagram{Elements: elems}
 	return tmp.Render()
 }
 
 func (m model) statusLine() string {
 	if m.typing {
-		return fmt.Sprintf("[text] %s_  enter commit · esc cancel", m.textBuf)
+		return fmt.Sprintf("[text] @(%d,%d) · enter commit · esc cancel", m.textPos[0], m.textPos[1])
 	}
 	if m.status != "" {
 		return m.status
 	}
 	extra := ""
 	if m.grabID != "" {
-		extra = " · moving " + m.grabID
+		extra = fmt.Sprintf(" · moving %s %+d%+d", m.grabID, m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1])
+	} else if m.mouse || m.anchored {
+		extra = fmt.Sprintf(" · %dx%d", abs(m.cursor[0]-m.anchor[0])+1, abs(m.cursor[1]-m.anchor[1])+1)
 	}
 	if m.anchored {
 		extra += fmt.Sprintf(" · anchor (%d,%d)", m.anchor[0], m.anchor[1])

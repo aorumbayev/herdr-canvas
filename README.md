@@ -32,7 +32,7 @@ A diagram holds four kinds of element:
 | Element    | What it is                                            |
 | ---------- | ----------------------------------------------------- |
 | `box`      | A rectangle with an optional label                    |
-| `line`     | A connector with an optional arrow at either end      |
+| `line`     | An orthogonal connector with an optional arrow at either end |
 | `text`     | A string at one coordinate                            |
 | `draw`     | Freeform cells — the pencil                           |
 
@@ -78,6 +78,8 @@ Pick a tool with one key, then drag with the left mouse button:
 | `x` | Delete           |
 | `s` | Save             |
 | `q` | Quit             |
+
+A line runs on one axis, then on the other axis. The bend gets a corner glyph.
 
 The arrow keys move a cursor, and space or enter anchors and commits, so you
 can draw the same shapes without a mouse. Every change saves at once.

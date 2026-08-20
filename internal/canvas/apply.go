@@ -68,7 +68,7 @@ func (d *Diagram) Apply(cmd Command) error {
 		if err != nil {
 			return err
 		}
-		moved, err := translate(*e, c.DX, c.DY)
+		moved, err := Translate(*e, c.DX, c.DY)
 		if err != nil {
 			return fmt.Errorf("move %s: %w", c.ID, err)
 		}
@@ -95,10 +95,10 @@ func (d *Diagram) Apply(cmd Command) error {
 	return nil
 }
 
-// translate moves the element e by (dx, dy). translate changes only the
-// fields that belong to the type of the element. translate returns an error if
+// Translate moves the element e by (dx, dy). Translate changes only the
+// fields that belong to the type of the element. Translate returns an error if
 // the new geometry is not well-formed.
-func translate(e Element, dx, dy int) (Element, error) {
+func Translate(e Element, dx, dy int) (Element, error) {
 	switch e.Type {
 	case Box:
 		e.X1, e.Y1, e.X2, e.Y2 = e.X1+dx, e.Y1+dy, e.X2+dx, e.Y2+dy

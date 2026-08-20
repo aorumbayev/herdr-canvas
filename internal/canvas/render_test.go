@@ -50,8 +50,8 @@ func TestRenderLineWithArrows(t *testing.T) {
 	}
 	g := d.Render()
 	want := map[[2]int]rune{
-		{0, 0}: '-', {1, 0}: '-', {2, 0}: '-', {3, 0}: '>',
-		{0, 1}: '^', {0, 2}: '|', {0, 3}: '|',
+		{0, 0}: '-', {1, 0}: '-', {2, 0}: '-', {3, 0}: '►',
+		{0, 1}: '▲', {0, 2}: '|', {0, 3}: '|',
 	}
 	for k, v := range want {
 		if got := g[k]; got != v {
@@ -157,5 +157,82 @@ func TestGridWindowHasFixedHeightAndOrigin(t *testing.T) {
 	}
 	if lines := strings.Count(got, "\n") + 1; lines != 5 {
 		t.Errorf("lines = %d, want 5", lines)
+	}
+}
+
+func TestRenderLineIsAnOrthogonalElbow(t *testing.T) {
+	cases := []struct {
+		name           string
+		x1, y1, x2, y2 int
+		arrow          Arrow
+		want           string
+	}{
+		{
+			name: "down then right",
+			x2:   4, y2: 3,
+			want: "|\n|\n|\n└----",
+		},
+		{
+			name: "down then right with an end arrow",
+			x2:   4, y2: 3, arrow: ArrowEnd,
+			want: "|\n|\n|\n└---►",
+		},
+		{
+			name: "up then left",
+			x1:   4, y1: 3, x2: 0, y2: 0,
+			want: "----┐\n    |\n    |\n    |",
+		},
+		{
+			name: "up then right",
+			y1:   3, x2: 3,
+			want: "┌---\n|\n|\n|",
+		},
+		{
+			name: "down then left",
+			x1:   3, x2: 0, y2: 3,
+			want: "   |\n   |\n   |\n---┘",
+		},
+		{
+			name: "straight horizontal keeps one run",
+			x2:   3,
+			want: "----",
+		},
+		{
+			name: "straight vertical keeps one run",
+			y2:   2,
+			want: "|\n|\n|",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := &Diagram{}
+			if err := d.Apply(LineCmd{X1: c.x1, Y1: c.y1, X2: c.x2, Y2: c.y2, Arrow: c.arrow}); err != nil {
+				t.Fatalf("Apply: %v", err)
+			}
+			if got := Export(d); got != c.want {
+				t.Errorf("Export =\n%s\nwant\n%s", got, c.want)
+			}
+		})
+	}
+}
+
+func TestRenderElbowTeesIntoAnExistingLine(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(LineCmd{X1: 4, Y1: 0, X2: 4, Y2: 4}); err != nil {
+		t.Fatalf("Apply vline: %v", err)
+	}
+	// The elbow runs down from (0,0) and ends on the vertical line at (4,2).
+	if err := d.Apply(LineCmd{X1: 0, Y1: 0, X2: 4, Y2: 2}); err != nil {
+		t.Fatalf("Apply elbow: %v", err)
+	}
+	g := d.Render()
+	if got := g[[2]int{0, 1}]; got != '|' {
+		t.Errorf("first leg cell = %q, want '|'", got)
+	}
+	if got := g[[2]int{0, 2}]; got != '└' {
+		t.Errorf("corner = %q, want up-right corner", got)
+	}
+	if got := g[[2]int{4, 2}]; got != '┤' {
+		t.Errorf("tee = %q, want a left tee", got)
 	}
 }

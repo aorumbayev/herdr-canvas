@@ -68,25 +68,26 @@ func drawLabel(g Grid, e Element) {
 }
 
 func drawLine(g Grid, e Element) {
-	pts := bresenham(e.X1, e.Y1, e.X2, e.Y2)
-	body := lineBody(e.X1, e.Y1, e.X2, e.Y2)
-	dx, dy := sign(e.X2-e.X1), sign(e.Y2-e.Y1)
+	pts, glyphs := elbow(e.X1, e.Y1, e.X2, e.Y2)
+	sdx, sdy := startDir(e.X1, e.Y1, e.X2, e.Y2)
+	edx, edy := endDir(e.X1, e.Y1, e.X2, e.Y2)
+	last := len(pts) - 1
 	for i, p := range pts {
-		ch := body
+		ch := glyphs[i]
 		switch {
 		case (e.Arrow == ArrowStart || e.Arrow == ArrowBoth) && i == 0:
-			ch = arrowAt(e.X1, e.Y1, e.X2, e.Y2, true)
-		case (e.Arrow == ArrowEnd || e.Arrow == ArrowBoth) && i == len(pts)-1:
-			ch = arrowAt(e.X1, e.Y1, e.X2, e.Y2, false)
+			ch = arrowGlyph(-sdx, -sdy)
+		case (e.Arrow == ArrowEnd || e.Arrow == ArrowBoth) && i == last:
+			ch = arrowGlyph(edx, edy)
 		default:
 			if existing, ok := g[p]; ok && isLineChar(existing) {
 				switch {
-				case i == 0:
-					ch = junction(existing, body, false, dx, dy)
-				case i == len(pts)-1:
-					ch = junction(existing, body, false, -dx, -dy)
+				case i == 0 && last > 0:
+					ch = junction(existing, ch, false, sdx, sdy)
+				case i == last && last > 0:
+					ch = junction(existing, ch, false, -edx, -edy)
 				default:
-					ch = junction(existing, body, true, 0, 0)
+					ch = junction(existing, ch, true, 0, 0)
 				}
 			}
 		}
@@ -94,9 +95,74 @@ func drawLine(g Grid, e Element) {
 	}
 }
 
+// elbow returns the cells of an orthogonal path from (x1,y1) to (x2,y2), with
+// the glyph of each cell. The path runs on the y axis first, then on the x
+// axis. A path that turns has one corner cell. A straight path has none.
+func elbow(x1, y1, x2, y2 int) ([][2]int, []rune) {
+	sx, sy := sign(x2-x1), sign(y2-y1)
+	var pts [][2]int
+	for y := y1; ; y += sy {
+		pts = append(pts, [2]int{x1, y})
+		if sy == 0 || y == y2 {
+			break
+		}
+	}
+	for x := x1 + sx; sx != 0; x += sx {
+		pts = append(pts, [2]int{x, y2})
+		if x == x2 {
+			break
+		}
+	}
+	glyphs := make([]rune, len(pts))
+	for i, p := range pts {
+		vert := (i > 0 && pts[i-1][0] == p[0]) || (i < len(pts)-1 && pts[i+1][0] == p[0])
+		horiz := (i > 0 && pts[i-1][1] == p[1]) || (i < len(pts)-1 && pts[i+1][1] == p[1])
+		switch {
+		case vert && horiz:
+			glyphs[i] = corner(sx, sy)
+		case vert:
+			glyphs[i] = '|'
+		default:
+			glyphs[i] = '-'
+		}
+	}
+	return pts, glyphs
+}
+
+// corner returns the bend glyph of an elbow that arrives on the y axis in the
+// direction sy and leaves on the x axis in the direction sx.
+func corner(sx, sy int) rune {
+	if sy > 0 {
+		if sx > 0 {
+			return '└'
+		}
+		return '┘'
+	}
+	if sx > 0 {
+		return '┌'
+	}
+	return '┐'
+}
+
+// startDir gives the direction the path takes out of its first cell.
+func startDir(x1, y1, x2, y2 int) (int, int) {
+	if y1 != y2 {
+		return 0, sign(y2 - y1)
+	}
+	return sign(x2 - x1), 0
+}
+
+// endDir gives the direction the path takes into its last cell.
+func endDir(x1, y1, x2, y2 int) (int, int) {
+	if x1 != x2 {
+		return sign(x2 - x1), 0
+	}
+	return 0, sign(y2 - y1)
+}
+
 func isLineChar(r rune) bool {
 	switch r {
-	case '-', '|', '+', '\\', '/', '┼', '├', '┤', '┬', '┴':
+	case '-', '|', '+', '┼', '├', '┤', '┬', '┴':
 		return true
 	}
 	return false
@@ -112,64 +178,18 @@ func sign(n int) int {
 	return 0
 }
 
-func lineBody(x1, y1, x2, y2 int) rune {
-	switch {
-	case y1 == y2:
-		return '-'
-	case x1 == x2:
-		return '|'
-	case (x2-x1)*(y2-y1) > 0:
-		return '\\'
-	default:
-		return '/'
-	}
-}
-
-func arrowAt(x1, y1, x2, y2 int, start bool) rune {
-	dx, dy := x2-x1, y2-y1
-	if start {
-		dx, dy = -dx, -dy
-	}
+// arrowGlyph returns the arrowhead that points in the direction (dx, dy).
+func arrowGlyph(dx, dy int) rune {
 	if abs(dx) >= abs(dy) {
 		if dx > 0 {
-			return '>'
+			return '►'
 		}
-		return '<'
+		return '◄'
 	}
 	if dy > 0 {
-		return 'v'
+		return '▼'
 	}
-	return '^'
-}
-
-func bresenham(x1, y1, x2, y2 int) [][2]int {
-	dx, dy := abs(x2-x1), -abs(y2-y1)
-	sx, sy := 1, 1
-	if x1 > x2 {
-		sx = -1
-	}
-	if y1 > y2 {
-		sy = -1
-	}
-	err := dx + dy
-	var pts [][2]int
-	x, y := x1, y1
-	for {
-		pts = append(pts, [2]int{x, y})
-		if x == x2 && y == y2 {
-			break
-		}
-		e2 := 2 * err
-		if e2 >= dy {
-			err += dy
-			x += sx
-		}
-		if e2 <= dx {
-			err += dx
-			y += sy
-		}
-	}
-	return pts
+	return '▲'
 }
 
 func abs(n int) int {
