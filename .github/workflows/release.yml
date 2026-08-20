@@ -135,7 +135,7 @@ jobs:
         if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
         env:
           GORELEASER_CURRENT_TAG: v${{ steps.decide.outputs.candidate }}
-        run: goreleaser build --clean
+        run: goreleaser build --clean --skip=validate
 
       - name: Commit the version
         if: steps.decide.outputs.action == 'fresh_cut'
