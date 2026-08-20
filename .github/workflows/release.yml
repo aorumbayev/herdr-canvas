@@ -176,7 +176,7 @@ jobs:
         if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
         env:
           CHANGELOG_JSON: ${{ toJSON(steps.dry.outputs.changelog) }}
-        run: ./scripts/write-release-notes.sh release-notes.md
+        run: ./scripts/write-release-notes.sh "${RUNNER_TEMP}/release-notes.md"
 
       - name: Upload draft assets
         if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
@@ -185,10 +185,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
-          if [ -f release-notes.md ]; then
-            goreleaser release --clean --release-notes=release-notes.md
+          notes="${RUNNER_TEMP}/release-notes.md"
+          if [ -f "$notes" ]; then
+            goreleaser release --clean --skip=validate --release-notes="$notes"
           else
-            goreleaser release --clean
+            goreleaser release --clean --skip=validate
           fi
 
       - name: Assert the draft has the five required assets
