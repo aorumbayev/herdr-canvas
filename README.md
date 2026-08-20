@@ -5,20 +5,12 @@
 <p align="center">Draw ASCII diagrams in your terminal. Let your agent read and edit them.</p>
 
 <p align="center">
-  <img src="docs/assets/canvas.svg" alt="herdr-canvas pane: draw a box, connect it, label it, send it to an agent" width="880" />
+  <img src="docs/assets/canvas.svg" alt="herdr split: draw on the canvas, send to the agent, the agent adds a box" width="1180" />
 </p>
 
 <p align="center">
   <a href="#install">Install</a> · <a href="#draw-your-first-diagram">First diagram</a> · <a href="#let-your-agent-edit-the-diagram">Agents</a>
 </p>
-
-```
-┌───────────────┐         ┌───────────────┐         ┌───────────────┐
-│               │         │               │         │               │
-│   you draw    │◄───────►│    one JSON   │◄───────►│  agent edits  │
-│               │         │               │         │               │
-└───────────────┘         └───────────────┘         └───────────────┘
-```
 
 ---
 

@@ -1,0 +1,329 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" width="1180" height="560"
+     role="img" aria-labelledby="ttl dsc">
+  <title id="ttl">herdr-canvas beside an agent pane</title>
+  <desc id="dsc">Draw a box, a line, and JSON. Send. The agent exports, then adds cli.</desc>
+  <style>
+    svg { font-family: Menlo, "SF Mono", ui-monospace, monospace; }
+    text { white-space: pre; font-size: 13px; fill: #c8cdd6; }
+    .tiny { font-size: 11px; fill: #8b93a1; }
+    .body { font-size: 12px; fill: #c8cdd6; }
+    .hdr { font-size: 12.5px; fill: #c8cdd6; }
+    .dim { fill: #6b7380; }
+    .ink { fill: #1c1d24; }
+    .cy { fill: #7eb8c4; }
+    .ok { fill: #8fbc8f; }
+  </style>
+  <defs>
+    <clipPath id="chatClip"><rect x="164" y="64" width="400" height="440"/></clipPath>
+    <clipPath id="canClip"><rect x="580" y="88" width="588" height="420"/></clipPath>
+    <clipPath id="footClip"><rect x="572" y="516" width="608" height="36"/></clipPath>
+    <clipPath id="inpClip"><rect x="196" y="518" width="360" height="22"/></clipPath>
+  </defs>
+
+  <rect width="1180" height="560" fill="#14151a"/>
+  <rect width="1180" height="32" fill="#1a1b21"/>
+  <text class="tiny" x="16" y="21">herdr</text>
+  <rect x="72" y="6" width="168" height="20" rx="2" fill="#25262e"/>
+  <text x="84" y="20" style="font-size:11px;fill:#c8cdd6">control</text>
+  <rect x="244" y="6" width="168" height="20" rx="2" fill="#2a2c36"/>
+  <text x="256" y="20" style="font-size:11px;fill:#eceff4">herdr-canvas</text>
+  <text class="tiny" x="420" y="21">#2</text>
+
+  <rect x="0" y="32" width="156" height="528" fill="#121318"/>
+  <text class="tiny" x="16" y="56">SPACES</text>
+  <circle cx="22" cy="76" r="3" fill="#c8cdd6"/>
+  <text class="body" x="34" y="80">herdr-canvas</text>
+  <text class="tiny" x="16" y="120">AGENTS</text>
+  <circle cx="22" cy="140" r="3" fill="#7eb8c4"/>
+  <text class="body" x="34" y="144">claude</text>
+  <text class="tiny" x="34" y="160">idle</text>
+
+  <rect x="156" y="32" width="416" height="528" fill="#1c1d24"/>
+  <rect x="156" y="32" width="416" height="28" fill="#1a1b21"/>
+  <text class="tiny" x="168" y="51">control</text>
+  <text class="tiny cy" x="228" y="51">claude</text>
+  <line x1="156" y1="60" x2="572" y2="60" stroke="#2c2e36"/>
+
+  <g clip-path="url(#chatClip)">
+    <g transform="translate(172, 84)">
+      <g>
+        <animateTransform attributeName="transform" type="translate" dur="24s"
+          repeatCount="indefinite" calcMode="discrete" keyTimes="0.0000;0.4300;0.5200;0.6300;0.7100;0.7700;1.0000" values="0 0;0 -460;0 -920;0 -1380;0 -1840;0 -2300;0 -2300"/>
+      <g transform="translate(0,0)">
+
+      </g>
+      <g transform="translate(0,460)">
+      <text class="tiny" x="0" y="20">you</text>
+      <text class="body" x="0" y="40">The canvas beside you is "herdr-canvas".</text>
+      <text class="body" x="0" y="58">Run this to see what is on it:</text>
+      <text class="cy" x="0" y="80" style="font-size:12px">herdr-canvas --name "herdr-canvas" export</text>
+      <text class="body" x="0" y="100">Then, unless you already ran it this session:</text>
+      <text class="cy" x="0" y="122" style="font-size:12px">herdr-canvas skill</text>
+      </g>
+      <g transform="translate(0,920)">
+      <text class="tiny" x="0" y="20">you</text>
+      <text class="body" x="0" y="40">The canvas beside you is "herdr-canvas".</text>
+      <text class="body" x="0" y="58">Run this to see what is on it:</text>
+      <text class="cy" x="0" y="80" style="font-size:12px">herdr-canvas --name "herdr-canvas" export</text>
+      <text class="body" x="0" y="100">Then, unless you already ran it this session:</text>
+      <text class="cy" x="0" y="122" style="font-size:12px">herdr-canvas skill</text>
+      <text class="tiny" x="0" y="152">claude</text>
+      <text class="ok" x="0" y="170" style="font-size:11px">$ herdr-canvas --name "herdr-canvas" export</text>
+      <text x="0" y="188" style="font-size:10.5px;fill:#c8cdd6">┌─────────────┐</text>
+      <text x="0" y="202" style="font-size:10.5px;fill:#c8cdd6">│you          │   JSON</text>
+      <text x="0" y="216" style="font-size:10.5px;fill:#c8cdd6">│             │             ┌───────────────┐</text>
+      <text x="0" y="230" style="font-size:10.5px;fill:#c8cdd6">│             └─────────────► agent         │</text>
+      <text x="0" y="244" style="font-size:10.5px;fill:#c8cdd6">└─────────────┘             └───────────────┘</text>
+      </g>
+      <g transform="translate(0,1380)">
+      <text class="tiny" x="0" y="20">you</text>
+      <text class="body" x="0" y="40">The canvas beside you is "herdr-canvas".</text>
+      <text class="body" x="0" y="58">Run this to see what is on it:</text>
+      <text class="cy" x="0" y="80" style="font-size:12px">herdr-canvas --name "herdr-canvas" export</text>
+      <text class="body" x="0" y="100">Then, unless you already ran it this session:</text>
+      <text class="cy" x="0" y="122" style="font-size:12px">herdr-canvas skill</text>
+      <text class="tiny" x="0" y="152">claude</text>
+      <text class="ok" x="0" y="170" style="font-size:11px">$ herdr-canvas --name "herdr-canvas" export</text>
+      <text x="0" y="188" style="font-size:10.5px;fill:#c8cdd6">┌─────────────┐</text>
+      <text x="0" y="202" style="font-size:10.5px;fill:#c8cdd6">│you          │   JSON</text>
+      <text x="0" y="216" style="font-size:10.5px;fill:#c8cdd6">│             │             ┌───────────────┐</text>
+      <text x="0" y="230" style="font-size:10.5px;fill:#c8cdd6">│             └─────────────► agent         │</text>
+      <text x="0" y="244" style="font-size:10.5px;fill:#c8cdd6">└─────────────┘             └───────────────┘</text>
+      <text class="body" x="0" y="272">I see you linked to agent over JSON.</text>
+      <text class="body" x="0" y="290">Add a cli box under agent?</text>
+      </g>
+      <g transform="translate(0,1840)">
+      <text class="tiny" x="0" y="20">you</text>
+      <text class="body" x="0" y="40">The canvas beside you is "herdr-canvas".</text>
+      <text class="body" x="0" y="58">Run this to see what is on it:</text>
+      <text class="cy" x="0" y="80" style="font-size:12px">herdr-canvas --name "herdr-canvas" export</text>
+      <text class="body" x="0" y="100">Then, unless you already ran it this session:</text>
+      <text class="cy" x="0" y="122" style="font-size:12px">herdr-canvas skill</text>
+      <text class="tiny" x="0" y="152">claude</text>
+      <text class="ok" x="0" y="170" style="font-size:11px">$ herdr-canvas --name "herdr-canvas" export</text>
+      <text x="0" y="188" style="font-size:10.5px;fill:#c8cdd6">┌─────────────┐</text>
+      <text x="0" y="202" style="font-size:10.5px;fill:#c8cdd6">│you          │   JSON</text>
+      <text x="0" y="216" style="font-size:10.5px;fill:#c8cdd6">│             │             ┌───────────────┐</text>
+      <text x="0" y="230" style="font-size:10.5px;fill:#c8cdd6">│             └─────────────► agent         │</text>
+      <text x="0" y="244" style="font-size:10.5px;fill:#c8cdd6">└─────────────┘             └───────────────┘</text>
+      <text class="body" x="0" y="272">I see you linked to agent over JSON.</text>
+      <text class="body" x="0" y="290">Add a cli box under agent?</text>
+      <text class="tiny" x="0" y="316">you</text>
+      <text class="body" x="0" y="336">yes, add cli under agent</text>
+      </g>
+      <g transform="translate(0,2300)">
+      <text class="tiny" x="0" y="20">you</text>
+      <text class="body" x="0" y="40">The canvas beside you is "herdr-canvas".</text>
+      <text class="body" x="0" y="58">Run this to see what is on it:</text>
+      <text class="cy" x="0" y="80" style="font-size:12px">herdr-canvas --name "herdr-canvas" export</text>
+      <text class="body" x="0" y="100">Then, unless you already ran it this session:</text>
+      <text class="cy" x="0" y="122" style="font-size:12px">herdr-canvas skill</text>
+      <text class="tiny" x="0" y="152">claude</text>
+      <text class="ok" x="0" y="170" style="font-size:11px">$ herdr-canvas --name "herdr-canvas" export</text>
+      <text x="0" y="188" style="font-size:10.5px;fill:#c8cdd6">┌─────────────┐</text>
+      <text x="0" y="202" style="font-size:10.5px;fill:#c8cdd6">│you          │   JSON</text>
+      <text x="0" y="216" style="font-size:10.5px;fill:#c8cdd6">│             │             ┌───────────────┐</text>
+      <text x="0" y="230" style="font-size:10.5px;fill:#c8cdd6">│             └─────────────► agent         │</text>
+      <text x="0" y="244" style="font-size:10.5px;fill:#c8cdd6">└─────────────┘             └───────────────┘</text>
+      <text class="body" x="0" y="272">I see you linked to agent over JSON.</text>
+      <text class="body" x="0" y="290">Add a cli box under agent?</text>
+      <text class="tiny" x="0" y="316">you</text>
+      <text class="body" x="0" y="336">yes, add cli under agent</text>
+      <text class="tiny" x="0" y="364">claude</text>
+      <text class="body" x="0" y="384">Added box cli and a line from agent.</text>
+      </g>
+      </g>
+    </g>
+  </g>
+  <line x1="156" y1="32" x2="156" y2="560" stroke="#2c2e36"/>
+  <line x1="572" y1="32" x2="572" y2="560" stroke="#2c2e36"/>
+  <rect x="164" y="512" width="400" height="36" fill="#16171c" stroke="#2c2e36"/>
+  <text class="tiny" x="176" y="534">→</text>
+  <g clip-path="url(#inpClip)">
+    <g transform="translate(196, 534)">
+      <g>
+        <animateTransform attributeName="transform" type="translate" dur="24s"
+          repeatCount="indefinite" calcMode="discrete" keyTimes="0;0.7100;1" values="0 0;0 -24;0 -24"/>
+        <text class="tiny" y="0"></text>
+        <text class="tiny" y="24">yes, add cli under agent</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="572" y="32" width="608" height="528" fill="#1c1d24"/>
+  <rect x="572" y="32" width="608" height="28" fill="#1a1b21"/>
+  <text class="tiny" x="584" y="51">herdr-canvas</text>
+  <line x1="572" y1="60" x2="1180" y2="60" stroke="#2c2e36"/>
+  <text class="hdr" x="584" y="82">herdr-canvas</text>
+  <text class="dim" x="980" y="82">1x</text>
+  <text class="dim" x="1010" y="82">recenter</text>
+  <text class="dim" x="1080" y="82">(8,4)</text>
+
+  <g clip-path="url(#canClip)">
+    <g transform="translate(592, 124)">
+      <g>
+        <animateTransform attributeName="transform" type="translate" dur="24s"
+          repeatCount="indefinite" calcMode="discrete" keyTimes="0.0000;0.0250;0.0600;0.0950;0.1450;0.1900;0.2400;0.2800;0.3200;0.7600;0.9600;1.0000" values="0 0;0 -480;0 -960;0 -1440;0 -1920;0 -2400;0 -2880;0 -3360;0 -3840;0 -4320;0 -4800;0 0"/>
+      <g transform="translate(0,0)"></g>
+      <g transform="translate(0,480)">
+        <text xml:space="preserve" y="0">┌───┐</text>
+        <text xml:space="preserve" y="16">│   │</text>
+        <text xml:space="preserve" y="32">└───┘</text>
+      </g>
+      <g transform="translate(0,960)">
+        <text xml:space="preserve" y="0">┌─────────┐</text>
+        <text xml:space="preserve" y="16">│you      │</text>
+        <text xml:space="preserve" y="32">│         │</text>
+        <text xml:space="preserve" y="48">│         │</text>
+        <text xml:space="preserve" y="64">└─────────┘</text>
+      </g>
+      <g transform="translate(0,1440)">
+        <text xml:space="preserve" y="0">┌─────────────┐</text>
+        <text xml:space="preserve" y="16">│you          │</text>
+        <text xml:space="preserve" y="32">│             │</text>
+        <text xml:space="preserve" y="48">│             │</text>
+        <text xml:space="preserve" y="64">│             │</text>
+        <text xml:space="preserve" y="80">│             │</text>
+        <text xml:space="preserve" y="96">└─────────────┘</text>
+      </g>
+      <g transform="translate(0,1920)">
+        <text xml:space="preserve" y="0">┌─────────────┐</text>
+        <text xml:space="preserve" y="16">│you          │</text>
+        <text xml:space="preserve" y="32">│             │             ┌─────┐</text>
+        <text xml:space="preserve" y="48">│             │             │     │</text>
+        <text xml:space="preserve" y="64">│             │             │     │</text>
+        <text xml:space="preserve" y="80">│             │             └─────┘</text>
+        <text xml:space="preserve" y="96">└─────────────┘</text>
+      </g>
+      <g transform="translate(0,2400)">
+        <text xml:space="preserve" y="0">┌─────────────┐</text>
+        <text xml:space="preserve" y="16">│you          │</text>
+        <text xml:space="preserve" y="32">│             │             ┌───────────────┐</text>
+        <text xml:space="preserve" y="48">│             │             │agent          │</text>
+        <text xml:space="preserve" y="64">│             │             │               │</text>
+        <text xml:space="preserve" y="80">│             │             │               │</text>
+        <text xml:space="preserve" y="96">└─────────────┘             │               │</text>
+        <text xml:space="preserve" y="112">                            │               │</text>
+        <text xml:space="preserve" y="128">                            └───────────────┘</text>
+      </g>
+      <g transform="translate(0,2880)">
+        <text xml:space="preserve" y="0">┌─────────────┐</text>
+        <text xml:space="preserve" y="16">│you          │</text>
+        <text xml:space="preserve" y="32">│             │             ┌───────────────┐</text>
+        <text xml:space="preserve" y="48">│             │             │agent          │</text>
+        <text xml:space="preserve" y="64">│             │             │               │</text>
+        <text xml:space="preserve" y="80">│             └─────►       │               │</text>
+        <text xml:space="preserve" y="96">└─────────────┘             │               │</text>
+        <text xml:space="preserve" y="112">                            │               │</text>
+        <text xml:space="preserve" y="128">                            └───────────────┘</text>
+      </g>
+      <g transform="translate(0,3360)">
+        <text xml:space="preserve" y="0">┌─────────────┐</text>
+        <text xml:space="preserve" y="16">│you          │</text>
+        <text xml:space="preserve" y="32">│             │             ┌───────────────┐</text>
+        <text xml:space="preserve" y="48">│             │             │agent          │</text>
+        <text xml:space="preserve" y="64">│             │             │               │</text>
+        <text xml:space="preserve" y="80">│             └─────────────►               │</text>
+        <text xml:space="preserve" y="96">└─────────────┘             │               │</text>
+        <text xml:space="preserve" y="112">                            │               │</text>
+        <text xml:space="preserve" y="128">                            └───────────────┘</text>
+      </g>
+      <g transform="translate(0,3840)">
+        <text xml:space="preserve" y="0">┌─────────────┐</text>
+        <text xml:space="preserve" y="16">│you          │   JSON</text>
+        <text xml:space="preserve" y="32">│             │             ┌───────────────┐</text>
+        <text xml:space="preserve" y="48">│             │             │agent          │</text>
+        <text xml:space="preserve" y="64">│             │             │               │</text>
+        <text xml:space="preserve" y="80">│             └─────────────►               │</text>
+        <text xml:space="preserve" y="96">└─────────────┘             │               │</text>
+        <text xml:space="preserve" y="112">                            │               │</text>
+        <text xml:space="preserve" y="128">                            └───────────────┘</text>
+      </g>
+      <g transform="translate(0,4320)">
+        <text xml:space="preserve" y="0">┌─────────────┐</text>
+        <text xml:space="preserve" y="16">│you          │   JSON</text>
+        <text xml:space="preserve" y="32">│             │             ┌───────────────┐</text>
+        <text xml:space="preserve" y="48">│             │             │agent          │</text>
+        <text xml:space="preserve" y="64">│             │             │               │</text>
+        <text xml:space="preserve" y="80">│             └─────────────►               │</text>
+        <text xml:space="preserve" y="96">└─────────────┘             │               │</text>
+        <text xml:space="preserve" y="112">                            │               │</text>
+        <text xml:space="preserve" y="128">                            └───────┬───────┘</text>
+        <text xml:space="preserve" y="144">                                    │</text>
+        <text xml:space="preserve" y="160">                                    │</text>
+        <text xml:space="preserve" y="176">                            ┌───────────────┐</text>
+        <text xml:space="preserve" y="192">                            │cli            │</text>
+        <text xml:space="preserve" y="208">                            │               │</text>
+        <text xml:space="preserve" y="224">                            │               │</text>
+        <text xml:space="preserve" y="240">                            └───────────────┘</text>
+      </g>
+      <g transform="translate(0,4800)"></g>
+      </g>
+    </g>
+  </g>
+
+  <g clip-path="url(#footClip)">
+    <g transform="translate(572, 528)">
+      <g>
+        <animateTransform attributeName="transform" type="translate" dur="24s"
+          repeatCount="indefinite" calcMode="discrete" keyTimes="0.0000;0.2400;0.3200;0.4200;0.5000;1.0000" values="0 0;0 -40;0 -80;0 -120;0 -160;0 -160"/>
+      <g transform="translate(0,0)">
+      <rect x="78" y="-11" width="42" height="15" fill="#c8cdd6"/>
+      <text class="ink" x="81" y="1">[box]</text>
+      <text x="126" y="1">line arrow text draw move del</text>
+      <text class="dim" x="338" y="1">│</text>
+      <text class="dim" x="354" y="1">undo redo</text>
+      <text class="dim" x="428" y="1">│</text>
+      <text x="444" y="1">send</text>
+      </g>
+      <g transform="translate(0,40)">
+      <text x="78" y="1">box</text>
+      <rect x="108" y="-11" width="48" height="15" fill="#c8cdd6"/>
+      <text class="ink" x="111" y="1">[line]</text>
+      <text x="162" y="1">arrow text draw move del</text>
+      <text class="dim" x="338" y="1">│</text>
+      <text x="354" y="1">undo redo</text>
+      <text class="dim" x="428" y="1">│</text>
+      <text x="444" y="1">send</text>
+      </g>
+      <g transform="translate(0,80)">
+      <text x="78" y="1">box line arrow</text>
+      <rect x="186" y="-11" width="42" height="15" fill="#c8cdd6"/>
+      <text class="ink" x="189" y="1">[text]</text>
+      <text x="234" y="1">draw move del</text>
+      <text class="dim" x="338" y="1">│</text>
+      <text x="354" y="1">undo redo</text>
+      <text class="dim" x="428" y="1">│</text>
+      <text x="444" y="1">send</text>
+      </g>
+      <g transform="translate(0,120)">
+      <text x="78" y="1">box line arrow text draw move del</text>
+      <text class="dim" x="338" y="1">│</text>
+      <text x="354" y="1">undo redo</text>
+      <text class="dim" x="428" y="1">│</text>
+      <rect x="444" y="-11" width="36" height="15" fill="#c8cdd6"/>
+      <text class="ink" x="447" y="1">send</text>
+      </g>
+      <g transform="translate(0,160)">
+      <rect x="78" y="-11" width="42" height="15" fill="#c8cdd6"/>
+      <text class="ink" x="81" y="1">[box]</text>
+      <text x="126" y="1">line arrow text draw move del</text>
+      <text class="dim" x="338" y="1">│</text>
+      <text x="354" y="1">undo redo</text>
+      <text class="dim" x="428" y="1">│</text>
+      <text x="444" y="1">send</text>
+      </g>
+      </g>
+    </g>
+  </g>
+
+  <g>
+    <animateTransform attributeName="transform" type="translate" dur="24s"
+      repeatCount="indefinite" calcMode="linear"
+      keyTimes="0;0.025;0.060;0.095;0.145;0.190;0.240;0.280;0.320;0.420;0.500;1"
+      values="604 116;604 116;640 148;720 212;832 148;960 244;720 180;832 196;760 132;1020 516;1020 516;604 116"/>
+    <animate attributeName="opacity" dur="24s" repeatCount="indefinite" calcMode="discrete"
+      keyTimes="0;0.025;0.500;1" values="0;1;0;0"/>
+    <rect width="8" height="15" fill="#eceff4" fill-opacity=".85"/>
+  </g>
+</svg>
