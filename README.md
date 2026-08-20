@@ -38,22 +38,64 @@ is the only source of truth.
 
 ## Install
 
-You need [herdr](https://herdr.dev) 0.8.2 or later and Go 1.26 or later. Linux
-and macOS. On Windows, install herdr and this plugin inside WSL2.
+Linux and macOS. Native Windows is not supported: install herdr and this
+plugin inside **WSL2**, and use the matching Linux archive.
+
+[GitHub Releases](https://github.com/aorumbayev/herdr-canvas/releases) publish
+four archives plus `checksums.txt`:
+
+| Machine | Archive |
+| --- | --- |
+| macOS amd64 | `herdr-canvas_Darwin_x86_64.tar.gz` |
+| macOS arm64 | `herdr-canvas_Darwin_arm64.tar.gz` |
+| Linux amd64 | `herdr-canvas_Linux_x86_64.tar.gz` |
+| Linux arm64 | `herdr-canvas_Linux_arm64.tar.gz` |
+
+You do not need a Go toolchain to install or update.
+
+### Herdr plugin
+
+You need [herdr](https://herdr.dev) 0.8.2 or later, git, and either curl or
+wget. You do not need Go.
 
 ```bash
 herdr plugin install aorumbayev/herdr-canvas
 ```
 
-herdr compiles the binary from source on your machine. This project publishes
-no binaries. The install runs `go build`, so the Go toolchain must be on your
-`PATH`.
+herdr clones the plugin, downloads the Release archive for the version in
+`herdr-plugin.toml` (not `/releases/latest`), checks the checksum, and runs
+`setup`. `herdr-canvas --version` prints that version as `0.x.y`.
+
+`v0.1.0` is notes only and has no archives, so a default-ref install stays
+broken until the next tagged release is published.
+
+### Standalone archive
+
+Download the archive for your OS and CPU from
+[GitHub Releases](https://github.com/aorumbayev/herdr-canvas/releases). Unpack
+`herdr-canvas` onto your `PATH`. After the download you do not need git, curl,
+or wget. On WSL2, use a `Linux_*` archive.
 
 > [!IMPORTANT]
 > The install writes one hotkey binding into your shared
 > `~/.config/herdr/config.toml`. herdr uses `prefix+c` for a new tab, so this
 > plugin uses `prefix+d`. The install writes the binding once. The uninstall
 > does not remove it.
+
+### Updates
+
+`herdr-canvas update` installs a newer published (non-draft) tag. A
+herdr-managed install goes through `herdr plugin install`. A standalone binary
+replaces itself from Release assets.
+
+A development build (`herdr-canvas --version` prints `dev`, or anything other
+than `0.x.y`) refuses update, does not contact GitHub, and does not show a TUI
+notice. Install from a GitHub Release or `herdr plugin install` instead.
+
+On a release binary, the canvas can show
+`newer 0.2.0 · herdr-canvas update · i dismiss`. Press `i` to hide that tag
+until a newer one exists. `i` does not apply the update. While you name a
+diagram or type on the canvas, `i` still inserts.
 
 ## Draw your first diagram
 
@@ -166,6 +208,8 @@ Then run `herdr-canvas list`, open the diagram for this repository with
 | `herdr-canvas move\|delete\|label`  | Change an element                            |
 | `herdr-canvas skill`              | Print the agent instructions                    |
 | `herdr-canvas setup`              | Install the herdr hotkey                        |
+| `herdr-canvas update`             | Install a newer published release               |
+| `herdr-canvas --version`          | Print the binary version (`0.x.y` or `dev`)     |
 
 Element commands read the diagram for the current repository. Pass `--name` to
 choose another one, and `--create` to create a diagram that does not exist yet.
@@ -175,8 +219,12 @@ choose another one, and `--create` to create a diagram that does not exist yet.
 Releases follow [Conventional Commits](https://www.conventionalcommits.org).
 A `feat` commit raises the minor version and a `fix` commit raises the patch
 version. The major version stays at 0, so a breaking change also raises the
-minor version. A maintainer starts a release by hand from the `release`
-workflow.
+minor version.
+
+A maintainer starts a release by hand from the `release` workflow
+(`workflow_dispatch`). `v0.1.0` stays notes-only; binaries begin at the next
+tagged version. A failed run may resume only an in-flight **draft** of that
+new version. A published release is never edited.
 
 ## License
 

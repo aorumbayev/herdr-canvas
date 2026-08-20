@@ -1,0 +1,28 @@
+version: 2
+project_name: herdr-canvas
+builds:
+  - id: herdr-canvas
+    main: ./cmd/herdr-canvas
+    binary: herdr-canvas
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X herdr-canvas/internal/version.Version={{.Version}}
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - none*
+checksum:
+  name_template: checksums.txt
+changelog:
+  disable: true
+release:
+  draft: true
+  use_existing_draft: true
+  replace_existing_artifacts: true
+  mode: keep-existing

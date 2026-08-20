@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"herdr-canvas/internal/herdr"
 	"herdr-canvas/internal/name"
 	"herdr-canvas/internal/store"
+	"herdr-canvas/internal/update"
+	"herdr-canvas/internal/version"
 )
 
 type phase int
@@ -116,6 +119,11 @@ type model struct {
 	workspace string
 	agents    []herdr.Agent
 	agentSel  int
+
+	check   func(context.Context) (update.Result, error)
+	dismiss func(string) error
+	hidden  func(string) (bool, error)
+	notice  string
 }
 
 // Run starts the TUI. Run opens the editor for the composite diagram in cwd.
@@ -189,10 +197,45 @@ func poll() tea.Cmd {
 	return tea.Tick(pollEvery, func(time.Time) tea.Msg { return pollMsg{} })
 }
 
-func (m model) Init() tea.Cmd { return poll() }
+type checkMsg struct {
+	res update.Result
+	err error
+}
+
+func (m model) Init() tea.Cmd {
+	if !version.IsRelease() {
+		return poll()
+	}
+	return tea.Batch(poll(), m.checkCmd())
+}
+
+func (m model) checkCmd() tea.Cmd {
+	check := m.check
+	if check == nil {
+		check = update.Check
+	}
+	return func() tea.Msg {
+		res, err := check(context.Background())
+		return checkMsg{res: res, err: err}
+	}
+}
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case checkMsg:
+		if msg.err != nil || !msg.res.Newer || msg.res.Latest == "" {
+			return m, nil
+		}
+		hidden := m.hidden
+		if hidden == nil {
+			hidden = update.Hidden
+		}
+		hide, err := hidden(msg.res.Latest)
+		if err != nil || hide {
+			return m, nil
+		}
+		m.notice = msg.res.Latest
+		return m, nil
 	case pollMsg:
 		// An in-progress drag, keyboard anchor, or text entry holds state that
 		// points at the current elements. Reloading under it would move the
@@ -206,6 +249,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ensureVisible()
 		return m, nil
 	case tea.KeyPressMsg:
+		if m.dismissNotice(msg) {
+			return m, nil
+		}
 		m.status = ""
 		switch m.phase {
 		case phasePick:
@@ -241,6 +287,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+func (m *model) dismissNotice(msg tea.KeyPressMsg) bool {
+	if m.notice == "" || m.phase == phaseName || m.typing {
+		return false
+	}
+	if msg.String() != "i" {
+		return false
+	}
+	fn := m.dismiss
+	if fn == nil {
+		fn = update.Dismiss
+	}
+	if err := fn(m.notice); err != nil {
+		return true
+	}
+	m.notice = ""
+	return true
+}
+
+func (m model) noticeLine() string {
+	if m.notice == "" {
+		return ""
+	}
+	return "newer " + m.notice + " · herdr-canvas update · i dismiss"
 }
 
 func (m *model) pickKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -394,8 +465,19 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+func (m model) noticeRows() int {
+	if m.notice == "" {
+		return 0
+	}
+	return 1
+}
+
+func (m model) layoutHeight() int {
+	return max(1, m.height-m.noticeRows())
+}
+
 func (m *model) onCanvas(x, y int) bool {
-	_, ok := m.vp.canvasPoint(x, y, m.width, m.height)
+	_, ok := m.vp.canvasPoint(x, y, m.width, m.layoutHeight())
 	return ok
 }
 
@@ -443,10 +525,10 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 			m.startPan(ev.X, ev.Y)
 			return nil
 		}
-		if ev.Button == tea.MouseLeft && (ev.Y == 0 || ev.Y == m.height-1) {
+		if ev.Button == tea.MouseLeft && (ev.Y == 0 || ev.Y == m.layoutHeight()-1) {
 			return m.chromeClick(ev.X, ev.Y)
 		}
-		if m.typing && ev.Button == tea.MouseLeft && ev.Y == m.height-1 {
+		if m.typing && ev.Button == tea.MouseLeft && ev.Y == m.layoutHeight()-1 {
 			return m.chromeClick(ev.X, ev.Y)
 		}
 		p, on := m.canvasPoint(ev.X, ev.Y)
@@ -503,7 +585,7 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 
 func (m *model) chromeClick(x, y int) tea.Cmd {
 	ch := layoutChrome(m.width, m.d.Name, m.vp.zoom, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
-	hit, ok := ch.hit(x, y, m.width, m.height)
+	hit, ok := ch.hit(x, y, m.width, m.layoutHeight())
 	if !ok || !hit.enabled {
 		return nil
 	}
@@ -658,7 +740,7 @@ func (m *model) deleteAt(p [2]int) {
 }
 
 func (m model) canvasHeight() int {
-	return max(1, m.height-headerRows-statusRows)
+	return max(1, m.height-headerRows-statusRows-m.noticeRows())
 }
 
 // canvasPoint translates a terminal mouse position into a grid coordinate.
@@ -666,12 +748,12 @@ func (m model) canvasHeight() int {
 // whose top-left cell is the viewport origin. canvasPoint returns false for a
 // position outside the canvas.
 func (m model) canvasPoint(x, y int) ([2]int, bool) {
-	return m.vp.canvasPoint(x, y, m.width, m.height)
+	return m.vp.canvasPoint(x, y, m.width, m.layoutHeight())
 }
 
 // ensureVisible moves the viewport to keep the cursor inside the viewport.
 func (m *model) ensureVisible() {
-	m.vp.ensureVisible(m.cursor, m.width, m.height)
+	m.vp.ensureVisible(m.cursor, m.width, m.layoutHeight())
 }
 
 func (m *model) apply(cmd canvas.Command) {
@@ -852,7 +934,7 @@ func (m model) View() tea.View {
 	case phasePick:
 		body = m.pickView()
 	case phaseName:
-		body = fmt.Sprintf("name: %s\n\nenter create · esc back\n%s\n", m.nameInput, m.status)
+		body = fmt.Sprintf("name: %s\n\nenter create · esc back\n%s\n%s\n", m.nameInput, m.status, m.noticeLine())
 	case phaseAgent:
 		body = m.agentView()
 	default:
@@ -877,6 +959,10 @@ func (m model) pickView() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n↑/↓ choose · enter open · n new · esc back · q quit\n")
+	if line := m.noticeLine(); line != "" {
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
 	if m.status != "" {
 		b.WriteString(m.status)
 		b.WriteString("\n")
@@ -909,6 +995,10 @@ func (m model) editView() string {
 	b.WriteString(m.vp.paint(g, m.width, m.canvasHeight()))
 	b.WriteString("\n")
 	b.WriteString(styleChromeFooter(ch, m.tool, m.hist.canUndo(), m.hist.canRedo()))
+	if line := m.noticeLine(); line != "" {
+		b.WriteString("\n")
+		b.WriteString(line)
+	}
 	return b.String()
 }
 
@@ -1170,6 +1260,10 @@ func (m model) agentView() string {
 			tabW, agentTab(a), a.Agent, a.Status, clip(a.Title, m.width-tabW-24))
 	}
 	b.WriteString("\n↑/↓ choose · enter send · esc cancel\n")
+	if line := m.noticeLine(); line != "" {
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 

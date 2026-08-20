@@ -36,4 +36,19 @@ jobs:
           fi
       - run: go vet ./...
       - run: go test ./...
+      - name: Run Unix shell helper tests
+        run: |
+          set -eu
+          sh scripts/fetch-release_test.sh
+          sh scripts/release-classify_test.sh
       - run: go build -o bin/herdr-canvas ./cmd/herdr-canvas
+      - name: Compile the four release targets
+        if: matrix.name == 'linux'
+        run: |
+          set -eu
+          for pair in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            goos=${pair%/*}
+            goarch=${pair#*/}
+            echo "CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -o /tmp/herdr-canvas-"$goos"-"$goarch" ./cmd/herdr-canvas
+          done

@@ -1,10 +1,40 @@
 package cli
 
 import (
+	"bytes"
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
+
+func TestCLIVersionFlags(t *testing.T) {
+	var long bytes.Buffer
+	root := newRootCmd()
+	root.SetOut(&long)
+	root.SetArgs([]string{"--version"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("--version: %v", err)
+	}
+
+	var short bytes.Buffer
+	root = newRootCmd()
+	root.SetOut(&short)
+	root.SetArgs([]string{"-v"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("-v: %v", err)
+	}
+
+	if long.String() != short.String() {
+		t.Fatalf("--version = %q, -v = %q", long.String(), short.String())
+	}
+	if !strings.Contains(long.String(), "dev") {
+		t.Fatalf("version output = %q, want to contain dev", long.String())
+	}
+	if f := newRootCmd().Flags().ShorthandLookup("v"); f == nil || f.Name != "version" {
+		t.Fatal("-v must be the version flag")
+	}
+}
 
 func run(t *testing.T, args ...string) string {
 	t.Helper()

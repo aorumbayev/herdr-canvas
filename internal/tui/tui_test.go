@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -10,6 +12,8 @@ import (
 	"herdr-canvas/internal/canvas"
 	"herdr-canvas/internal/herdr"
 	"herdr-canvas/internal/store"
+	"herdr-canvas/internal/update"
+	"herdr-canvas/internal/version"
 )
 
 func editor(t *testing.T) model {
@@ -1043,5 +1047,287 @@ func TestUndoDuringTextCommitsThenSecondUndoRemovesIt(t *testing.T) {
 	m = send(t, m, ctrlZ())
 	if len(m.d.Elements) != 0 {
 		t.Errorf("second undo = %+v", m.d.Elements)
+	}
+}
+
+func setVersion(t *testing.T, v string) {
+	t.Helper()
+	prev := version.Version
+	version.Version = v
+	t.Cleanup(func() { version.Version = prev })
+}
+
+func stateClient(t *testing.T) *update.Client {
+	t.Helper()
+	dir := t.TempDir()
+	return &update.Client{
+		LookupEnv: func(k string) string {
+			if k == "XDG_STATE_HOME" {
+				return dir
+			}
+			return ""
+		},
+	}
+}
+
+func newerCheck(latest string) func(context.Context) (update.Result, error) {
+	return func(context.Context) (update.Result, error) {
+		return update.Result{Current: version.Version, Latest: latest, Newer: true}, nil
+	}
+}
+
+func applyReleaseInit(t *testing.T, m model) model {
+	t.Helper()
+	if !version.IsRelease() {
+		t.Fatal("applyReleaseInit needs a 0.x.y Version")
+	}
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init returned nil")
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("Init msg = %T, want BatchMsg", msg)
+	}
+	var sawCheck bool
+	for _, c := range batch {
+		inner := c()
+		if _, isPoll := inner.(pollMsg); isPoll {
+			continue
+		}
+		sawCheck = true
+		next, _ := m.Update(inner)
+		m = next.(model)
+	}
+	if !sawCheck {
+		t.Fatal("release Init did not run a check")
+	}
+	return m
+}
+
+func TestDevInitDoesNotCheck(t *testing.T) {
+	setVersion(t, "dev")
+	var checks int
+	m := editor(t)
+	m.check = func(context.Context) (update.Result, error) {
+		checks++
+		return update.Result{}, errors.New("check must not run")
+	}
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init returned nil")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.BatchMsg); ok {
+		t.Fatal("development Init must not batch a check")
+	}
+	if _, ok := msg.(pollMsg); !ok {
+		t.Fatalf("Init msg = %T, want pollMsg", msg)
+	}
+	if checks != 0 {
+		t.Fatalf("check ran %d times", checks)
+	}
+	if m.notice != "" {
+		t.Fatalf("notice = %q", m.notice)
+	}
+}
+
+func TestNewerNotice(t *testing.T) {
+	setVersion(t, "0.1.0")
+	c := stateClient(t)
+	m := editor(t)
+	m.check = newerCheck("0.2.0")
+	m.hidden = c.Hidden
+	m.dismiss = c.Dismiss
+	m = applyReleaseInit(t, m)
+	want := "newer 0.2.0 · herdr-canvas update · i dismiss"
+	if m.notice != "0.2.0" {
+		t.Fatalf("notice = %q", m.notice)
+	}
+	got := screen(m)
+	if !strings.Contains(got, want) {
+		t.Fatalf("edit view missing notice: %q", got)
+	}
+	if !strings.Contains(got, "[box]") {
+		t.Fatalf("edit view dropped footer chips: %q", got)
+	}
+	lines := strings.Split(got, "\n")
+	if !strings.Contains(lines[len(lines)-1], want) {
+		t.Fatalf("notice must be its own last row: %q", lines[len(lines)-1])
+	}
+	if !strings.Contains(lines[len(lines)-2], "[box]") {
+		t.Fatalf("footer chips must stay above the notice: %q", lines[len(lines)-2])
+	}
+	m.phase = phasePick
+	if got := screen(m); !strings.Contains(got, want) {
+		t.Fatalf("pick view missing notice: %q", got)
+	}
+}
+
+func TestCheckErrorIsSilent(t *testing.T) {
+	setVersion(t, "0.1.0")
+	m := editor(t)
+	m.status = "keep-me"
+	m.check = func(context.Context) (update.Result, error) {
+		return update.Result{}, errors.New("boom")
+	}
+	m = applyReleaseInit(t, m)
+	if m.notice != "" {
+		t.Fatalf("notice = %q", m.notice)
+	}
+	if m.status != "keep-me" {
+		t.Fatalf("status = %q, check errors must not write status", m.status)
+	}
+	if strings.Contains(screen(m), "newer") {
+		t.Fatalf("view leaked an update notice: %q", screen(m))
+	}
+}
+
+func TestSameTagStaysHidden(t *testing.T) {
+	setVersion(t, "0.1.0")
+	c := stateClient(t)
+	if err := c.Dismiss("0.2.0"); err != nil {
+		t.Fatalf("Dismiss: %v", err)
+	}
+	m := editor(t)
+	m.check = newerCheck("0.2.0")
+	m.hidden = c.Hidden
+	m.dismiss = c.Dismiss
+	m = applyReleaseInit(t, m)
+	if m.notice != "" {
+		t.Fatalf("dismissed tag still shown: %q", m.notice)
+	}
+	if strings.Contains(screen(m), "newer") {
+		t.Fatalf("view shows a dismissed notice: %q", screen(m))
+	}
+}
+
+func TestDismissIInPickAndEdit(t *testing.T) {
+	setVersion(t, "0.1.0")
+	c := stateClient(t)
+	m := editor(t)
+	m.check = newerCheck("0.2.0")
+	m.hidden = c.Hidden
+	m.dismiss = c.Dismiss
+	m = applyReleaseInit(t, m)
+
+	m.phase = phasePick
+	m = send(t, m, key("i"))
+	if m.notice != "" {
+		t.Fatalf("pick i left notice %q", m.notice)
+	}
+	if m.phase != phasePick {
+		t.Fatalf("phase = %v, want pick", m.phase)
+	}
+	got, err := c.DismissedVersion()
+	if err != nil {
+		t.Fatalf("DismissedVersion: %v", err)
+	}
+	if got != "0.2.0" {
+		t.Fatalf("persisted %q, want 0.2.0", got)
+	}
+
+	c2 := stateClient(t)
+	m = editor(t)
+	m.check = newerCheck("0.2.0")
+	m.hidden = c2.Hidden
+	m.dismiss = c2.Dismiss
+	m = applyReleaseInit(t, m)
+	if m.phase != phaseEdit {
+		t.Fatal("want edit")
+	}
+	m = send(t, m, key("i"))
+	if m.notice != "" {
+		t.Fatalf("edit i left notice %q", m.notice)
+	}
+	if m.phase != phaseEdit {
+		t.Fatalf("phase = %v, want edit", m.phase)
+	}
+	got, err = c2.DismissedVersion()
+	if err != nil {
+		t.Fatalf("DismissedVersion: %v", err)
+	}
+	if got != "0.2.0" {
+		t.Fatalf("persisted %q, want 0.2.0", got)
+	}
+}
+
+func TestDismissKeepsNoticeWhenPersistFails(t *testing.T) {
+	setVersion(t, "0.1.0")
+	m := editor(t)
+	m.check = newerCheck("0.2.0")
+	m.hidden = func(string) (bool, error) { return false, nil }
+	m.dismiss = func(string) error { return errors.New("disk full") }
+	m = applyReleaseInit(t, m)
+	m = send(t, m, key("i"))
+	if m.notice != "0.2.0" {
+		t.Fatalf("failed persist cleared notice: %q", m.notice)
+	}
+	if m.phase != phaseEdit {
+		t.Fatalf("phase = %v, want edit", m.phase)
+	}
+	got := screen(m)
+	if !strings.Contains(got, "newer 0.2.0 · herdr-canvas update · i dismiss") {
+		t.Fatalf("failed persist hid the notice: %q", got)
+	}
+	if !strings.Contains(got, "[box]") {
+		t.Fatalf("failed persist dropped footer chips: %q", got)
+	}
+}
+
+func TestTypingAndNamingKeepI(t *testing.T) {
+	setVersion(t, "0.1.0")
+	c := stateClient(t)
+	m := editor(t)
+	m.check = newerCheck("0.2.0")
+	m.hidden = c.Hidden
+	m.dismiss = c.Dismiss
+	m = applyReleaseInit(t, m)
+
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("i"))
+	if !m.typing {
+		t.Fatal("want typing")
+	}
+	if m.textBuf != "i" {
+		t.Fatalf("textBuf = %q, want i", m.textBuf)
+	}
+	if m.notice != "0.2.0" {
+		t.Fatalf("typing dismissed the notice: %q", m.notice)
+	}
+
+	m.typing = false
+	m.textBuf = ""
+	m.phase = phaseName
+	m.nameInput = ""
+	m = send(t, m, key("i"))
+	if m.nameInput != "i" {
+		t.Fatalf("nameInput = %q, want i", m.nameInput)
+	}
+	if m.notice != "0.2.0" {
+		t.Fatalf("naming dismissed the notice: %q", m.notice)
+	}
+	if m.phase != phaseName {
+		t.Fatalf("phase = %v", m.phase)
+	}
+}
+
+func TestPickerNStillNewDiagram(t *testing.T) {
+	setVersion(t, "0.1.0")
+	c := stateClient(t)
+	m := editor(t)
+	m.check = newerCheck("0.2.0")
+	m.hidden = c.Hidden
+	m.dismiss = c.Dismiss
+	m = applyReleaseInit(t, m)
+	m.phase = phasePick
+	m.names = []string{"demo"}
+	m = send(t, m, key("n"))
+	if m.phase != phaseName {
+		t.Fatalf("phase = %v, want phaseName", m.phase)
+	}
+	if m.notice != "0.2.0" {
+		t.Fatalf("n dismissed the notice: %q", m.notice)
 	}
 }
