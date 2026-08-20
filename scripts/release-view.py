@@ -5,19 +5,14 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 
 def die(msg: str, code: int = 1) -> None:
     sys.stderr.write("release-view: %s\n" % msg)
     raise SystemExit(code)
-
-
-def is_not_found(data: object) -> bool:
-    return isinstance(data, dict) and (
-        str(data.get("status")) == "404" or data.get("message") == "Not Found"
-    )
 
 
 def main(argv: list[str]) -> None:
@@ -27,38 +22,27 @@ def main(argv: list[str]) -> None:
     repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
     if not repo:
         die("GITHUB_REPOSITORY is required")
+    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
 
-    env = os.environ.copy()
-    env["GH_PAGER"] = "cat"
-    env["GH_PROMPT_DISABLED"] = "1"
-    env["NO_COLOR"] = "1"
-
-    proc = subprocess.run(
-        ["gh", "api", "repos/%s/releases/tags/%s" % (repo, tag)],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    raw = (proc.stdout or "").strip()
-    err = (proc.stderr or "").strip()
-    if err:
-        sys.stderr.write(err + "\n")
-
-    data = None
-    if raw:
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            die("gh api returned non-JSON (exit %s): %s" % (proc.returncode, raw[:200]))
-
-    if is_not_found(data):
-        die("HTTP 404: Not Found (repos/%s/releases/tags/%s)" % (repo, tag))
-
-    if proc.returncode != 0:
-        raise SystemExit(proc.returncode)
-
-    if not raw:
-        die("gh api exited %s with empty stdout" % proc.returncode)
+    url = "https://api.github.com/repos/%s/releases/tags/%s" % (repo, tag)
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "herdr-canvas-release",
+    }
+    if token:
+        headers["Authorization"] = "Bearer %s" % token
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.load(resp)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace")
+        if exc.code == 404:
+            die("HTTP 404: Not Found (%s)" % url)
+        die("HTTP %s fetching %s\n%s" % (exc.code, url, body[:500]))
+    except urllib.error.URLError as exc:
+        die("network error fetching %s: %s" % (url, exc.reason))
 
     if not isinstance(data, dict) or "draft" not in data or "tag_name" not in data:
         die("unexpected GitHub API JSON")

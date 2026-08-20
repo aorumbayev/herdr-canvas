@@ -59,6 +59,7 @@ jobs:
             >/tmp/gh-release.json 2>/tmp/gh-release.err; then
             gh_st=$?
           fi
+          echo "release-view exit=$gh_st bytes=$(wc -c </tmp/gh-release.json) err=$(tr '\n' ' ' </tmp/gh-release.err)"
           view_status=$(./scripts/release-gh-status.sh "$gh_st" /tmp/gh-release.err /tmp/gh-release.json)
           case "$view_status" in
           viewed)
