@@ -61,10 +61,10 @@ no binaries. The install runs `go build`, so the Go toolchain must be on your
 
 ## Draw your first diagram
 
-Press `prefix+d`. herdr opens a new tab with the canvas. When you are inside a
-git repository, the canvas opens the diagram named for that repository and
-branch, for example `herdr-canvas@main`. When you are not, a picker lists your
-diagrams and offers to create one.
+Press `prefix+d`. herdr opens the canvas in a split beside the active pane.
+When you are inside a git repository, the canvas opens the diagram named for
+that repository and branch, for example `herdr-canvas@main`. When you are not,
+a picker lists your diagrams and offers to create one.
 
 Pick a tool with one key, then drag with the left mouse button:
 

@@ -8,8 +8,8 @@ platforms = ["linux", "macos"]
 [[build]]
 command = ["go", "build", "-o", "bin/herdr-canvas", "./cmd/herdr-canvas"]
 
-# This step installs the prefix+d hotkey. The hotkey opens the canvas in a new
-# tab, in the cwd of the current pane. herdr uses prefix+c for a new tab. This
+# This step installs the prefix+d hotkey. The hotkey opens the canvas in a split
+# beside the active pane, in the cwd of that pane. herdr uses prefix+c for a new tab. This
 # plugin uses prefix+d.
 [[build]]
 command = ["bin/herdr-canvas", "setup"]
@@ -23,5 +23,5 @@ command = ["bin/herdr-canvas", "launch"]
 [[panes]]
 id = "canvas"
 title = "herdr-canvas"
-placement = "tab"
+placement = "split"
 command = ["./bin/herdr-canvas"]
