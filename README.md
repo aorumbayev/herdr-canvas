@@ -100,13 +100,17 @@ One agent in the workspace receives the diagram at once. When the workspace
 holds more than one agent, the canvas lists them and you choose:
 
 ```
-send herdr-canvas@main to which agent?
+send herdr-canvas@main to which agent?   workspace: herdr-canvas
 
-> claude    w4M:p3   idle
-  opencode  w4M:pV   working
+> control       claude    idle     Editable grid validation and mouse bugs
+  review-prose  claude    idle     Herdr-canvas prose review
+  ship          claude    working  herdr canvas pull request ship stage
 
 ↑/↓ choose · enter send · esc cancel
 ```
+
+Each row names the tab the way your tab bar names it, then the agent, its
+state, and its terminal title.
 
 You keep drawing while the agent works. The canvas reloads the file when the
 agent changes it, so you both look at the same diagram.

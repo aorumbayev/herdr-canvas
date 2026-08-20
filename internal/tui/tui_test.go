@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -513,5 +514,30 @@ func TestSendReportsWhenTheWorkspaceHasNoAgent(t *testing.T) {
 	}
 	if !strings.Contains(m.status, "no agent") {
 		t.Errorf("status = %q, want a no-agent report", m.status)
+	}
+}
+
+func TestAgentPickerNamesTheTabAndWorkspace(t *testing.T) {
+	m, _ := editorWithAgents(t,
+		herdr.Agent{PaneID: "w4M:p3", Agent: "claude", Status: "idle",
+			TabID: "w4M:t2", TabLabel: "control", WorkspaceLabel: "herdr-canvas",
+			Title: "Editable grid validation and mouse bugs"},
+		herdr.Agent{PaneID: "w4M:pS", Agent: "claude", Status: "idle",
+			TabID: "w4M:tD", TabLabel: "review-prose", WorkspaceLabel: "herdr-canvas",
+			Title: "Herdr-canvas prose review"},
+		herdr.Agent{PaneID: "w4M:pV", Agent: "claude", Status: "working",
+			TabID: "w4M:tE", TabLabel: "ship", WorkspaceLabel: "herdr-canvas",
+			Title: "herdr canvas pull request ship stage"},
+	)
+	m.width = 78
+	m = send(t, m, key("s"))
+	view := m.View()
+	for _, want := range []string{"control", "review-prose", "ship", "workspace: herdr-canvas"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("picker does not name %q:\n%s", want, view)
+		}
+	}
+	if os.Getenv("SHOW_PICKER") != "" {
+		t.Log("\n" + view)
 	}
 }

@@ -772,15 +772,56 @@ func (m *model) agentKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m model) agentView() string {
 	var b strings.Builder
-	b.WriteString("send " + m.d.Name + " to which agent?\n\n")
+	b.WriteString("send " + m.d.Name + " to which agent?")
+	if ws := m.agentWorkspace(); ws != "" {
+		b.WriteString("   workspace: " + ws)
+	}
+	b.WriteString("\n\n")
+
+	tabW := 3
+	for _, a := range m.agents {
+		if n := len([]rune(agentTab(a))); n > tabW {
+			tabW = n
+		}
+	}
 	for i, a := range m.agents {
 		if i == m.agentSel {
 			b.WriteString("> ")
 		} else {
 			b.WriteString("  ")
 		}
-		fmt.Fprintf(&b, "%-9s %-8s %s\n", a.Agent, a.PaneID, a.Status)
+		fmt.Fprintf(&b, "%-*s  %-8s  %-7s  %s\n",
+			tabW, agentTab(a), a.Agent, a.Status, clip(a.Title, m.width-tabW-24))
 	}
 	b.WriteString("\n↑/↓ choose · enter send · esc cancel\n")
 	return b.String()
+}
+
+// agentTab names the tab of an agent the way the herdr tab bar names it. A
+// pane id is the fallback, because a tab label can be absent.
+func agentTab(a herdr.Agent) string {
+	if a.TabLabel != "" {
+		return a.TabLabel
+	}
+	return a.PaneID
+}
+
+func (m model) agentWorkspace() string {
+	for _, a := range m.agents {
+		if a.WorkspaceLabel != "" {
+			return a.WorkspaceLabel
+		}
+	}
+	return ""
+}
+
+func clip(s string, w int) string {
+	if w < 4 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= w {
+		return s
+	}
+	return string(r[:w-1]) + "…"
 }

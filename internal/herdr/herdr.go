@@ -12,13 +12,19 @@ import (
 	"strings"
 )
 
-// Agent is one agent pane in a workspace.
+// Agent is one agent pane in a workspace. TabLabel and WorkspaceLabel do not
+// come from the agent list. Agents fills them from the tab and workspace
+// lists, because a pane id alone does not tell a person which agent this is.
 type Agent struct {
 	PaneID    string `json:"pane_id"`
 	Agent     string `json:"agent"`
 	Status    string `json:"agent_status"`
 	Workspace string `json:"workspace_id"`
+	TabID     string `json:"tab_id"`
 	Title     string `json:"terminal_title_stripped"`
+
+	TabLabel       string `json:"-"`
+	WorkspaceLabel string `json:"-"`
 }
 
 // Client runs the herdr command line.
@@ -144,16 +150,78 @@ func (c *Client) Agents(workspace string) ([]Agent, error) {
 	if err := json.Unmarshal(out, &env); err != nil {
 		return nil, fmt.Errorf("agent list: %w", err)
 	}
-	if workspace == "" {
-		return env.Result.Agents, nil
-	}
-	var in []Agent
-	for _, a := range env.Result.Agents {
-		if a.Workspace == workspace {
-			in = append(in, a)
+	in := env.Result.Agents
+	if workspace != "" {
+		in = nil
+		for _, a := range env.Result.Agents {
+			if a.Workspace == workspace {
+				in = append(in, a)
+			}
 		}
 	}
+	// A label read that fails leaves the ids in place. A picker with weaker
+	// names is better than no picker.
+	tabs, err := c.tabLabels()
+	if err != nil {
+		return in, nil
+	}
+	spaces, err := c.workspaceLabels()
+	if err != nil {
+		spaces = map[string]string{}
+	}
+	for i := range in {
+		in[i].TabLabel = tabs[in[i].TabID]
+		in[i].WorkspaceLabel = spaces[in[i].Workspace]
+	}
 	return in, nil
+}
+
+// tabLabels maps a tab id to the label herdr shows in the tab bar.
+func (c *Client) tabLabels() (map[string]string, error) {
+	out, err := c.run("tab", "list")
+	if err != nil {
+		return nil, err
+	}
+	var env struct {
+		Result struct {
+			Tabs []struct {
+				TabID string `json:"tab_id"`
+				Label string `json:"label"`
+			} `json:"tabs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out, &env); err != nil {
+		return nil, fmt.Errorf("tab list: %w", err)
+	}
+	m := make(map[string]string, len(env.Result.Tabs))
+	for _, tb := range env.Result.Tabs {
+		m[tb.TabID] = tb.Label
+	}
+	return m, nil
+}
+
+// workspaceLabels maps a workspace id to the name herdr shows for it.
+func (c *Client) workspaceLabels() (map[string]string, error) {
+	out, err := c.run("workspace", "list")
+	if err != nil {
+		return nil, err
+	}
+	var env struct {
+		Result struct {
+			Workspaces []struct {
+				ID    string `json:"workspace_id"`
+				Label string `json:"label"`
+			} `json:"workspaces"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out, &env); err != nil {
+		return nil, fmt.Errorf("workspace list: %w", err)
+	}
+	m := make(map[string]string, len(env.Result.Workspaces))
+	for _, w := range env.Result.Workspaces {
+		m[w.ID] = w.Label
+	}
+	return m, nil
 }
 
 // Prompt submits text to an agent pane.
