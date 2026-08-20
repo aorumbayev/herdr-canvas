@@ -14,16 +14,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: true
 
-      # The first run finds no release and starts at 0.1.0. After that a feat
-      # commit raises the minor version and a fix commit raises the patch
-      # version. The major version stays at 0, so a breaking change also
-      # raises the minor version.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Dry-run only. Do not enable the goreleaser hook on go-semantic-release;
+      # that publishes notes before archives exist. Do not attach files to a
+      # published release.
       - name: Read the next version
         id: dry
         uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f # v1.24.1
@@ -32,27 +38,180 @@ jobs:
           allow-initial-development-versions: true
           dry: true
 
-      - name: Stop when no commit needs a release
-        if: steps.dry.outputs.version == ''
+      - name: Classify the candidate release
+        id: decide
+        env:
+          D: ${{ steps.dry.outputs.version }}
         run: |
+          set -eu
+          T=$(sed -n 's/^version = "\(.*\)"/\1/p' herdr-plugin.toml | head -n 1)
+          if [ -z "$T" ]; then
+            echo "herdr-plugin.toml has no version" >&2
+            exit 1
+          fi
+          if [ -n "$D" ]; then
+            CANDIDATE=$D
+          else
+            CANDIDATE=$T
+          fi
+          gh_st=0
+          if ! gh release view "v$CANDIDATE" --json isDraft,tagName,assets \
+            >/tmp/gh-release.json 2>/tmp/gh-release.err; then
+            gh_st=$?
+          fi
+          view_status=$(./scripts/release-gh-status.sh "$gh_st" /tmp/gh-release.err /tmp/gh-release.json)
+          case "$view_status" in
+          viewed)
+            CLASS=$(./scripts/release-classify.sh /tmp/gh-release.json)
+            ;;
+          missing)
+            CLASS=missing
+            ;;
+          *)
+            echo "release-gh-status returned unexpected status '$view_status'" >&2
+            exit 1
+            ;;
+          esac
+          case "$CLASS" in
+          missing | draft | published_complete | published_incomplete) ;;
+          *)
+            echo "release-classify returned unexpected class '$CLASS'" >&2
+            exit 1
+            ;;
+          esac
+          eval "$(./scripts/release-decide.sh "$D" "$T" "$CLASS")"
+          {
+            echo "candidate=$candidate"
+            echo "class=$class"
+            echo "action=$action"
+            echo "dry=$D"
+          } >> "$GITHUB_OUTPUT"
+          echo "classified v$candidate as $class -> $action"
+
+      - name: Refuse a published release without binaries
+        if: steps.decide.outputs.action == 'fail_published_incomplete'
+        env:
+          CANDIDATE: ${{ steps.decide.outputs.candidate }}
+        run: |
+          set -eu
+          echo "Published release v$CANDIDATE has no binary assets and cannot be changed."
+          echo "Add a feat, fix, perf, or revert commit and dispatch again so dry-run yields a new version."
+          echo "Do not run GoReleaser against that published tag."
+          exit 1
+
+      - name: Stop when no commit needs a release
+        if: steps.decide.outputs.action == 'fail_noop'
+        run: |
+          set -eu
           echo "No feat, fix, perf, or revert commit since the last release."
           exit 1
 
-      # herdr reads the version from herdr-plugin.toml in the checked-out
-      # source, so the tag must point at a commit that already holds the new
-      # version.
-      - name: Commit the version
+      - name: Already published with binaries
+        if: steps.decide.outputs.action == 'already_published'
         env:
-          VERSION: ${{ steps.dry.outputs.version }}
+          CANDIDATE: ${{ steps.decide.outputs.candidate }}
         run: |
-          ./scripts/stamp-version.sh "$VERSION"
+          set -eu
+          echo "v$CANDIDATE is already published with the required binary assets."
+
+      - name: Stamp the plugin version
+        if: steps.decide.outputs.action == 'fresh_cut'
+        env:
+          VERSION: ${{ steps.decide.outputs.candidate }}
+        run: ./scripts/stamp-version.sh "$VERSION"
+
+      - name: Install GoReleaser
+        if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          # Action README: max-satisfying semver. `~> v2` includes 2.0–2.4, which
+          # lack use_existing_draft (v2.5+). `~> v2.5` is only 2.5.x in node-semver.
+          version: "^v2.5.0"
+          install-only: true
+
+      - name: Build archives before any stamp push
+        if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
+        env:
+          GORELEASER_CURRENT_TAG: v${{ steps.decide.outputs.candidate }}
+        run: goreleaser build --clean
+
+      - name: Commit the version
+        if: steps.decide.outputs.action == 'fresh_cut'
+        env:
+          VERSION: ${{ steps.decide.outputs.candidate }}
+        run: |
+          set -eu
           git config user.name herdr-canvas-release
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git commit -am "chore(release): $VERSION [skip ci]"
+          git add herdr-plugin.toml
+          git commit -m "chore(release): $VERSION [skip ci]"
           git push origin HEAD:main
 
-      - name: Tag and publish
-        uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f # v1.24.1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          allow-initial-development-versions: true
+      - name: Point the candidate tag at HEAD
+        if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
+        env:
+          CANDIDATE: ${{ steps.decide.outputs.candidate }}
+        run: |
+          set -eu
+          tag="v$CANDIDATE"
+          head=$(git rev-parse HEAD)
+          remote=$(git ls-remote origin "refs/tags/$tag" | awk '{ print $1 }')
+          if [ -n "$remote" ] && [ "$remote" != "$head" ]; then
+            echo "remote tag $tag is $remote but HEAD is $head; not moving the tag" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            local=$(git rev-parse "$tag")
+            if [ "$local" != "$head" ]; then
+              echo "local tag $tag is $local but HEAD is $head; not moving the tag" >&2
+              exit 1
+            fi
+          else
+            git tag "$tag"
+          fi
+
+      - name: Write release notes
+        if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
+        env:
+          CHANGELOG_JSON: ${{ toJSON(steps.dry.outputs.changelog) }}
+        run: ./scripts/write-release-notes.sh release-notes.md
+
+      - name: Upload draft assets
+        if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
+        env:
+          GORELEASER_CURRENT_TAG: v${{ steps.decide.outputs.candidate }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          if [ -f release-notes.md ]; then
+            goreleaser release --clean --release-notes=release-notes.md
+          else
+            goreleaser release --clean
+          fi
+
+      - name: Assert the draft has the five required assets
+        if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
+        env:
+          CANDIDATE: ${{ steps.decide.outputs.candidate }}
+        run: |
+          set -eu
+          gh_st=0
+          if ! gh release view "v$CANDIDATE" --json isDraft,tagName,assets \
+            >/tmp/gh-draft.json 2>/tmp/gh-draft.err; then
+            gh_st=$?
+          fi
+          view_status=$(./scripts/release-gh-status.sh "$gh_st" /tmp/gh-draft.err /tmp/gh-draft.json)
+          if [ "$view_status" != viewed ]; then
+            echo "draft asset check expected a viewed draft, got '$view_status'" >&2
+            exit 1
+          fi
+          ./scripts/release-classify.sh --assert-draft-complete /tmp/gh-draft.json
+
+      - name: Publish the draft
+        if: steps.decide.outputs.action == 'fresh_cut' || steps.decide.outputs.action == 'resume'
+        env:
+          CANDIDATE: ${{ steps.decide.outputs.candidate }}
+        run: |
+          set -eu
+          gh release edit "v$CANDIDATE" --draft=false

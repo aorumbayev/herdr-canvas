@@ -13,6 +13,7 @@ import (
 	"herdr-canvas/internal/name"
 	"herdr-canvas/internal/store"
 	"herdr-canvas/internal/tui"
+	"herdr-canvas/internal/version"
 )
 
 //go:embed SKILL.md
@@ -40,10 +41,12 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "herdr-canvas",
 		Short:         "Dead-simple ASCII diagram canvas",
+		Version:       version.Version,
 		RunE:          runTUI,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
+	root.InitDefaultVersionFlag()
 	root.PersistentFlags().String("name", "", "diagram name (defaults to composite repo@branch)")
 	root.PersistentFlags().Bool("create", false, "create the diagram when it does not exist")
 	root.AddCommand(
@@ -61,6 +64,7 @@ func newRootCmd() *cobra.Command {
 		labelCmd(),
 		launchCmd(),
 		setupCmd(),
+		updateCmd(),
 	)
 	return root
 }

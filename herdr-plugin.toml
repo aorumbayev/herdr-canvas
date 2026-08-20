@@ -6,7 +6,7 @@ description = "Dead-simple ASCII diagram canvas"
 platforms = ["linux", "macos"]
 
 [[build]]
-command = ["go", "build", "-o", "bin/herdr-canvas", "./cmd/herdr-canvas"]
+command = ["sh", "scripts/fetch-release.sh"]
 
 # This step installs the prefix+d hotkey. The hotkey opens the canvas in a split
 # beside the active pane, in the cwd of that pane. A second press closes it. herdr uses prefix+c for a new tab. This
