@@ -54,11 +54,11 @@ jobs:
           else
             CANDIDATE=$T
           fi
-          gh_st=0
-          if ! ./scripts/release-view.sh "v$CANDIDATE" \
-            >/tmp/gh-release.json 2>/tmp/gh-release.err; then
-            gh_st=$?
-          fi
+          set +e
+          ./scripts/release-view.sh "v$CANDIDATE" \
+            >/tmp/gh-release.json 2>/tmp/gh-release.err
+          gh_st=$?
+          set -e
           echo "release-view exit=$gh_st bytes=$(wc -c </tmp/gh-release.json) err=$(tr '\n' ' ' </tmp/gh-release.err)"
           view_status=$(./scripts/release-gh-status.sh "$gh_st" /tmp/gh-release.err /tmp/gh-release.json)
           case "$view_status" in
@@ -197,11 +197,11 @@ jobs:
           CANDIDATE: ${{ steps.decide.outputs.candidate }}
         run: |
           set -eu
-          gh_st=0
-          if ! ./scripts/release-view.sh "v$CANDIDATE" \
-            >/tmp/gh-draft.json 2>/tmp/gh-draft.err; then
-            gh_st=$?
-          fi
+          set +e
+          ./scripts/release-view.sh "v$CANDIDATE" \
+            >/tmp/gh-draft.json 2>/tmp/gh-draft.err
+          gh_st=$?
+          set -e
           view_status=$(./scripts/release-gh-status.sh "$gh_st" /tmp/gh-draft.err /tmp/gh-draft.json)
           if [ "$view_status" != viewed ]; then
             echo "draft asset check expected a viewed draft, got '$view_status'" >&2
