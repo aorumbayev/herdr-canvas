@@ -58,27 +58,63 @@ func (c *Client) run(args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// PaneIDs returns the panes of a workspace.
-func (c *Client) PaneIDs(workspace string) ([]string, error) {
+// Pane is one pane of a workspace.
+type Pane struct {
+	ID            string `json:"pane_id"`
+	Cwd           string `json:"cwd"`
+	ForegroundCwd string `json:"foreground_cwd"`
+	Focused       bool   `json:"focused"`
+}
+
+// Panes returns the panes of a workspace.
+func (c *Client) Panes(workspace string) ([]Pane, error) {
 	out, err := c.run("pane", "list", "--workspace", workspace)
 	if err != nil {
 		return nil, err
 	}
 	var env struct {
 		Result struct {
-			Panes []struct {
-				PaneID string `json:"pane_id"`
-			} `json:"panes"`
+			Panes []Pane `json:"panes"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(out, &env); err != nil {
 		return nil, fmt.Errorf("pane list: %w", err)
 	}
-	ids := make([]string, 0, len(env.Result.Panes))
-	for _, p := range env.Result.Panes {
-		ids = append(ids, p.PaneID)
+	return env.Result.Panes, nil
+}
+
+// PaneIDs returns the pane ids of a workspace.
+func (c *Client) PaneIDs(workspace string) ([]string, error) {
+	panes, err := c.Panes(workspace)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(panes))
+	for _, p := range panes {
+		ids = append(ids, p.ID)
 	}
 	return ids, nil
+}
+
+// FocusedCwd returns the directory of the focused pane of a workspace. herdr
+// leaves HERDR_ACTIVE_PANE_CWD empty for a plugin action, and the working
+// directory of the action is the plugin root, so this is the only reliable
+// answer to "which repository is the person looking at".
+func (c *Client) FocusedCwd(workspace string) (string, error) {
+	panes, err := c.Panes(workspace)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range panes {
+		if !p.Focused {
+			continue
+		}
+		if p.ForegroundCwd != "" {
+			return p.ForegroundCwd, nil
+		}
+		return p.Cwd, nil
+	}
+	return "", fmt.Errorf("no focused pane in %s", workspace)
 }
 
 // RunsProgram reports whether a pane runs prog in its foreground process

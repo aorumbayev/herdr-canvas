@@ -20,6 +20,10 @@ func launchCmd() *cobra.Command {
 		Short:  "Open the canvas beside the active pane, or close it when it is open",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Link on every press, not only at install. herdr renames the
+			// staging checkout after the build step, so the build step cannot
+			// know the final plugin root.
+			_ = linkBinary()
 			return toggle(herdr.New(), herdr.Workspace())
 		},
 	}
@@ -33,9 +37,12 @@ func launchCmd() *cobra.Command {
 // detached checkout of this repository. Naming a diagram after it produces
 // repo@<commit> and gives a different diagram for every installed version, so
 // paneCwd refuses it.
-func paneCwd() (string, error) {
+func paneCwd(c paneHost, workspace string) (string, error) {
 	if p := os.Getenv("HERDR_ACTIVE_PANE_CWD"); p != "" {
 		return p, nil
+	}
+	if cwd, err := c.FocusedCwd(workspace); err == nil && cwd != "" {
+		return cwd, nil
 	}
 	if raw := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); raw != "" {
 		var ctx struct {
@@ -68,6 +75,7 @@ type paneHost interface {
 	RunsProgram(paneID, prog string) (bool, error)
 	ClosePane(paneID string) error
 	OpenSplit(cwd string) error
+	FocusedCwd(workspace string) (string, error)
 }
 
 // toggle closes every canvas pane of the workspace. If the workspace has no
@@ -101,7 +109,7 @@ func toggle(c paneHost, workspace string) error {
 		return nil
 	}
 
-	cwd, err := paneCwd()
+	cwd, err := paneCwd(c, workspace)
 	if err != nil {
 		return err
 	}

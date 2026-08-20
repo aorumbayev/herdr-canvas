@@ -7,11 +7,12 @@ import (
 )
 
 type fakeHost struct {
-	panes   []string
-	canvas  map[string]bool
-	readErr error
-	closed  []string
-	opened  []string
+	panes      []string
+	canvas     map[string]bool
+	readErr    error
+	closed     []string
+	opened     []string
+	focusedCwd string
 }
 
 func (f *fakeHost) PaneIDs(string) ([]string, error) { return f.panes, nil }
@@ -36,13 +37,24 @@ func (f *fakeHost) OpenSplit(cwd string) error {
 	return nil
 }
 
+func (f *fakeHost) FocusedCwd(string) (string, error) {
+	if f.focusedCwd == "" {
+		return "", errors.New("no focused pane")
+	}
+	return f.focusedCwd, nil
+}
+
 func TestToggleOpensWhenNoCanvasPaneIsOpen(t *testing.T) {
-	f := &fakeHost{panes: []string{"w1:p1", "w1:p2"}, canvas: map[string]bool{}}
+	f := &fakeHost{panes: []string{"w1:p1", "w1:p2"}, canvas: map[string]bool{},
+		focusedCwd: "/repos/thing"}
 	if err := toggle(f, "w1"); err != nil {
 		t.Fatalf("toggle: %v", err)
 	}
-	if len(f.opened) != 1 {
-		t.Errorf("opened = %v, want one split", f.opened)
+	// The split must open on the repository the person is looking at. The
+	// working directory here is the plugin root, a detached checkout of this
+	// repository, which would name the diagram after the plugin version.
+	if len(f.opened) != 1 || f.opened[0] != "/repos/thing" {
+		t.Errorf("opened = %v, want one split on the focused pane directory", f.opened)
 	}
 	if len(f.closed) != 0 {
 		t.Errorf("closed = %v, want none", f.closed)
