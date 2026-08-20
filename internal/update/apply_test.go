@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"herdr-canvas/internal/store"
@@ -185,6 +186,57 @@ func TestApplyStandaloneRecordsUpdateTo(t *testing.T) {
 	}
 	if u.version != "0.2.0" || u.dest != dest {
 		t.Fatalf("UpdateTo(%q, %q)", u.version, u.dest)
+	}
+}
+
+func TestArchiveFilterMatchesGoreleaserAssets(t *testing.T) {
+	cases := []struct {
+		goos, goarch, asset string
+	}{
+		{"darwin", "amd64", "herdr-canvas_Darwin_x86_64.tar.gz"},
+		{"darwin", "arm64", "herdr-canvas_Darwin_arm64.tar.gz"},
+		{"linux", "amd64", "herdr-canvas_Linux_x86_64.tar.gz"},
+		{"linux", "arm64", "herdr-canvas_Linux_arm64.tar.gz"},
+	}
+	for _, c := range cases {
+		t.Run(c.asset, func(t *testing.T) {
+			re := regexp.MustCompile(archiveFilter(c.goos, c.goarch))
+			if !re.MatchString(c.asset) {
+				t.Fatalf("filter %q did not match %q", archiveFilter(c.goos, c.goarch), c.asset)
+			}
+			for _, other := range cases {
+				if other.asset == c.asset {
+					continue
+				}
+				if re.MatchString(other.asset) {
+					t.Fatalf("filter %q matched wrong asset %q", archiveFilter(c.goos, c.goarch), other.asset)
+				}
+			}
+		})
+	}
+}
+
+func TestArchiveFilterRejectsWrongOSArchNames(t *testing.T) {
+	re := regexp.MustCompile(archiveFilter("linux", "amd64"))
+	wrong := []string{
+		"herdr-canvas_linux_x86_64.tar.gz",
+		"herdr-canvas_Linux_amd64.tar.gz",
+		"herdr-canvas_Darwin_x86_64.tar.gz",
+		"herdr-canvas_Linux_arm64.tar.gz",
+		"herdr-canvas_Windows_x86_64.tar.gz",
+		"herdr-canvas_darwin_x86_64.tar.gz",
+	}
+	for _, name := range wrong {
+		if re.MatchString(name) {
+			t.Fatalf("linux/amd64 filter matched %q", name)
+		}
+	}
+	darwin := regexp.MustCompile(archiveFilter("darwin", "arm64"))
+	if darwin.MatchString("herdr-canvas_darwin_arm64.tar.gz") {
+		t.Fatal("darwin/arm64 filter must not match lowercase OS")
+	}
+	if darwin.MatchString("herdr-canvas_Darwin_amd64.tar.gz") {
+		t.Fatal("darwin/arm64 filter must not match amd64")
 	}
 }
 

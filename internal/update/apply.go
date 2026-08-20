@@ -168,5 +168,12 @@ func archiveFilter(goos, goarch string) string {
 	if goarch == "amd64" {
 		arch = "x86_64"
 	}
-	return fmt.Sprintf(`_%s_%s\.tar\.gz$`, goos, arch)
+	return fmt.Sprintf(`_%s_%s\.tar\.gz$`, titleOS(goos), arch)
+}
+
+func titleOS(goos string) string {
+	if goos == "" {
+		return goos
+	}
+	return strings.ToUpper(goos[:1]) + goos[1:]
 }
