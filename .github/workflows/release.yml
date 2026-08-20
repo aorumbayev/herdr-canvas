@@ -55,7 +55,7 @@ jobs:
             CANDIDATE=$T
           fi
           gh_st=0
-          if ! gh release view "v$CANDIDATE" --json isDraft,tagName,assets \
+          if ! ./scripts/release-view.sh "v$CANDIDATE" \
             >/tmp/gh-release.json 2>/tmp/gh-release.err; then
             gh_st=$?
           fi
@@ -197,7 +197,7 @@ jobs:
         run: |
           set -eu
           gh_st=0
-          if ! gh release view "v$CANDIDATE" --json isDraft,tagName,assets \
+          if ! ./scripts/release-view.sh "v$CANDIDATE" \
             >/tmp/gh-draft.json 2>/tmp/gh-draft.err; then
             gh_st=$?
           fi

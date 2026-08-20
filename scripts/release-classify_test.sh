@@ -211,6 +211,13 @@ else
 	not_ok "workflow must call release-gh-status.sh"
 fi
 
+if grep -q 'release-view.sh' "$repo/.github/workflows/release.yml" \
+	&& ! grep -q 'gh release view' "$repo/.github/workflows/release.yml"; then
+	ok "workflow fetches releases via release-view.sh (gh api)"
+else
+	not_ok "workflow must use release-view.sh, not gh release view --json"
+fi
+
 if grep -n 'resume v0.1.0' "$repo/.github/workflows/release.yml" >/dev/null 2>&1; then
 	not_ok "release.yml must not say resume v0.1.0"
 else
