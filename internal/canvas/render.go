@@ -8,6 +8,23 @@ import (
 // Grid is the sparse (x, y) -> char render of a Diagram.
 type Grid map[[2]int]rune
 
+// The one character set for boxes and lines. asciiflow calls this set
+// "extended". Every glyph here comes from the Unicode box-drawing block, so a
+// box edge and a line junction join without a change of style.
+const (
+	glyphHoriz    = '─'
+	glyphVert     = '│'
+	glyphTopLeft  = '┌'
+	glyphTopRight = '┐'
+	glyphLowLeft  = '└'
+	glyphLowRight = '┘'
+	glyphCross    = '┼'
+	glyphTeeRight = '├'
+	glyphTeeLeft  = '┤'
+	glyphTeeDown  = '┬'
+	glyphTeeUp    = '┴'
+)
+
 // Render produces the grid. Render is a pure function of the elements. Later
 // elements in the slice cover earlier elements.
 func (d *Diagram) Render() Grid {
@@ -35,17 +52,17 @@ func (d *Diagram) Render() Grid {
 
 func drawBox(g Grid, e Element) {
 	for x := e.X1; x <= e.X2; x++ {
-		g[[2]int{x, e.Y1}] = '-'
-		g[[2]int{x, e.Y2}] = '-'
+		g[[2]int{x, e.Y1}] = glyphHoriz
+		g[[2]int{x, e.Y2}] = glyphHoriz
 	}
 	for y := e.Y1; y <= e.Y2; y++ {
-		g[[2]int{e.X1, y}] = '|'
-		g[[2]int{e.X2, y}] = '|'
+		g[[2]int{e.X1, y}] = glyphVert
+		g[[2]int{e.X2, y}] = glyphVert
 	}
-	g[[2]int{e.X1, e.Y1}] = '+'
-	g[[2]int{e.X2, e.Y1}] = '+'
-	g[[2]int{e.X1, e.Y2}] = '+'
-	g[[2]int{e.X2, e.Y2}] = '+'
+	g[[2]int{e.X1, e.Y1}] = glyphTopLeft
+	g[[2]int{e.X2, e.Y1}] = glyphTopRight
+	g[[2]int{e.X1, e.Y2}] = glyphLowLeft
+	g[[2]int{e.X2, e.Y2}] = glyphLowRight
 	drawLabel(g, e)
 }
 
@@ -121,9 +138,9 @@ func elbow(x1, y1, x2, y2 int) ([][2]int, []rune) {
 		case vert && horiz:
 			glyphs[i] = corner(sx, sy)
 		case vert:
-			glyphs[i] = '|'
+			glyphs[i] = glyphVert
 		default:
-			glyphs[i] = '-'
+			glyphs[i] = glyphHoriz
 		}
 	}
 	return pts, glyphs
@@ -134,14 +151,14 @@ func elbow(x1, y1, x2, y2 int) ([][2]int, []rune) {
 func corner(sx, sy int) rune {
 	if sy > 0 {
 		if sx > 0 {
-			return '└'
+			return glyphLowLeft
 		}
-		return '┘'
+		return glyphLowRight
 	}
 	if sx > 0 {
-		return '┌'
+		return glyphTopLeft
 	}
-	return '┐'
+	return glyphTopRight
 }
 
 // startDir gives the direction the path takes out of its first cell.
@@ -162,7 +179,9 @@ func endDir(x1, y1, x2, y2 int) (int, int) {
 
 func isLineChar(r rune) bool {
 	switch r {
-	case '-', '|', '+', '┼', '├', '┤', '┬', '┴':
+	case glyphHoriz, glyphVert, glyphCross, glyphTeeRight, glyphTeeLeft, glyphTeeDown, glyphTeeUp:
+		return true
+	case glyphTopLeft, glyphTopRight, glyphLowLeft, glyphLowRight:
 		return true
 	}
 	return false

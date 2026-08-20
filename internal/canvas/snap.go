@@ -7,42 +7,61 @@ package canvas
 // the cell and makes a tee. The parameters sdcol and sdrow give the direction
 // of the tee stub. Each of these two parameters is -1, 0 or 1.
 func junction(existing, inc rune, cross bool, sdcol, sdrow int) rune {
-	if existing == '|' && (inc == '-' || inc == '\\' || inc == '/') {
+	if existing == glyphVert && isHorizIncoming(inc) {
 		if cross {
-			return '┼'
+			return glyphCross
 		}
 		switch {
 		case sdcol > 0:
-			return '├'
+			return glyphTeeRight
 		case sdcol < 0:
-			return '┤'
+			return glyphTeeLeft
 		default:
-			return '┼'
+			return glyphCross
 		}
 	}
-	if existing == '-' && (inc == '|' || inc == '\\' || inc == '/') {
+	if existing == glyphHoriz && isVertIncoming(inc) {
 		if cross {
-			return '┼'
+			return glyphCross
 		}
 		switch {
 		case sdrow > 0:
-			return '┬'
+			return glyphTeeDown
 		case sdrow < 0:
-			return '┴'
+			return glyphTeeUp
 		default:
-			return '┼'
+			return glyphCross
 		}
 	}
-	if existing == '+' || isJunction(existing) {
+	// A box corner and a junction glyph already carry the shape of the cell.
+	// A second segment does not improve either of them.
+	if isCorner(existing) || isJunction(existing) {
 		return existing
 	}
 	return inc
 }
 
+func isHorizIncoming(r rune) bool {
+	return r == glyphHoriz || r == '\\' || r == '/'
+}
+
+func isVertIncoming(r rune) bool {
+	return r == glyphVert || r == '\\' || r == '/'
+}
+
+// isCorner reports whether r is a box-drawing corner glyph.
+func isCorner(r rune) bool {
+	switch r {
+	case glyphTopLeft, glyphTopRight, glyphLowLeft, glyphLowRight:
+		return true
+	}
+	return false
+}
+
 // isJunction reports whether r is a box-drawing junction glyph.
 func isJunction(r rune) bool {
 	switch r {
-	case '┼', '├', '┤', '┬', '┴':
+	case glyphCross, glyphTeeRight, glyphTeeLeft, glyphTeeDown, glyphTeeUp:
 		return true
 	}
 	return false

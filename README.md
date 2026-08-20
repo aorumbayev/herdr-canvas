@@ -9,11 +9,11 @@
 </p>
 
 ```
-+---------------+         +---------------+         +---------------+
-|               |         |               |         |               |
-|   you draw    |<------->|    one JSON   |<------->|  agent edits  |
-|               |         |               |         |               |
-+---------------+         +---------------+         +---------------+
+┌───────────────┐         ┌───────────────┐         ┌───────────────┐
+│               │         │               │         │               │
+│   you draw    │◄───────►│    one JSON   │◄───────►│  agent edits  │
+│               │         │               │         │               │
+└───────────────┘         └───────────────┘         └───────────────┘
 ```
 
 ---
@@ -81,7 +81,9 @@ Pick a tool with one key, then drag with the left mouse button:
 | `q` | Quit             |
 
 A line and an arrow run on one axis, then on the other axis. The bend gets a
-corner glyph. An arrow gets one arrowhead at its end.
+corner glyph. An arrow gets one arrowhead at its end. Boxes and lines use one
+Unicode box-drawing set (`┌ ─ ┐ │ └ ┘ ┼ ►`), so an edge and a junction join
+without a change of style.
 
 The arrow keys move a cursor, and space or enter anchors and commits, so you
 can draw the same shapes without a mouse. Every change saves at once.

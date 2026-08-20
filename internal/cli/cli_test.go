@@ -32,7 +32,7 @@ func TestCLIBoxTextExport(t *testing.T) {
 	run(t, "--name", "demo", "box", "0", "0", "3", "2")
 	run(t, "--name", "demo", "text", "1", "1", "hi")
 	got := run(t, "--name", "demo", "export")
-	want := "+--+\n|hi|\n+--+\n"
+	want := "┌──┐\n│hi│\n└──┘\n"
 	if got != want {
 		t.Errorf("export = %q, want %q", got, want)
 	}
@@ -70,7 +70,7 @@ func TestCLICreateFlagCreatesDiagram(t *testing.T) {
 		t.Fatalf("box --create: %v", err)
 	}
 	got := run(t, "--name", "demo", "export")
-	want := "+--+\n|hi|\n+--+\n"
+	want := "┌──┐\n│hi│\n└──┘\n"
 	if got != want {
 		t.Errorf("export = %q, want %q", got, want)
 	}

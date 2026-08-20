@@ -58,6 +58,12 @@ Everything spatial is allowed: nesting, overlap, crossing lines, dangling
 lines. Cell conflicts resolve by z-order; crossing lines render junction
 glyphs (`┼`, `├`, `┤`, `┬`, `┴`).
 
+## Character set
+
+Boxes and lines use one Unicode box-drawing set: `┌ ─ ┐ │ └ ┘` for a box,
+`─` and `│` for a line run, `┼ ├ ┤ ┬ ┴` for a junction, and `► ◄ ▲ ▼` for an
+arrowhead. A freeform cell holds any character you give it.
+
 ## Line routing
 
 A line is orthogonal. The line runs on the y axis from (x1,y1) to y2, then on
@@ -86,9 +92,9 @@ places an arrowhead (`►`, `◄`, `▲`, `▼`) on the end that `--arrow` names
 trailing whitespace trimmed, e.g.:
 
 ```
-+--+
-|hi|
-+--+
+┌──┐
+│hi│
+└──┘
 ```
 
 ## Installation side effect

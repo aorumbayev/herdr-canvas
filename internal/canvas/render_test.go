@@ -12,9 +12,9 @@ func TestRenderBox(t *testing.T) {
 	}
 	g := d.Render()
 	want := map[[2]int]rune{
-		{0, 0}: '+', {1, 0}: '-', {2, 0}: '+',
-		{0, 1}: '|', {2, 1}: '|',
-		{0, 2}: '+', {1, 2}: '-', {2, 2}: '+',
+		{0, 0}: '┌', {1, 0}: '─', {2, 0}: '┐',
+		{0, 1}: '│', {2, 1}: '│',
+		{0, 2}: '└', {1, 2}: '─', {2, 2}: '┘',
 	}
 	if len(g) != len(want) {
 		t.Fatalf("got %d cells, want %d: %v", len(g), len(want), g)
@@ -34,7 +34,7 @@ func TestExport(t *testing.T) {
 	if err := d.Apply(TextCmd{X: 1, Y: 1, Text: "hi"}); err != nil {
 		t.Fatalf("Apply text: %v", err)
 	}
-	want := "+--+\n|hi|\n+--+"
+	want := "┌──┐\n│hi│\n└──┘"
 	if got := Export(d); got != want {
 		t.Errorf("Export = %q, want %q", got, want)
 	}
@@ -50,8 +50,8 @@ func TestRenderLineWithArrows(t *testing.T) {
 	}
 	g := d.Render()
 	want := map[[2]int]rune{
-		{0, 0}: '-', {1, 0}: '-', {2, 0}: '-', {3, 0}: '►',
-		{0, 1}: '▲', {0, 2}: '|', {0, 3}: '|',
+		{0, 0}: '─', {1, 0}: '─', {2, 0}: '─', {3, 0}: '►',
+		{0, 1}: '▲', {0, 2}: '│', {0, 3}: '│',
 	}
 	for k, v := range want {
 		if got := g[k]; got != v {
@@ -93,7 +93,7 @@ func TestRenderLineCrossesBoxEdge(t *testing.T) {
 	}
 	g := d.Render()
 	want := map[[2]int]rune{
-		{1, 1}: '-', {2, 1}: '┼', {3, 1}: '-', {4, 1}: '-',
+		{1, 1}: '─', {2, 1}: '┼', {3, 1}: '─', {4, 1}: '─',
 	}
 	for k, v := range want {
 		if got := g[k]; got != v {
@@ -107,7 +107,7 @@ func TestRenderBoxLabel(t *testing.T) {
 	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 2, Label: "hi"}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if got, want := Export(d), "+--+\n|hi|\n+--+"; got != want {
+	if got, want := Export(d), "┌──┐\n│hi│\n└──┘"; got != want {
 		t.Errorf("Export = %q, want %q", got, want)
 	}
 }
@@ -117,7 +117,7 @@ func TestRenderBoxLabelClippedToInnerWidth(t *testing.T) {
 	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 2, Label: "hello"}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if got, want := Export(d), "+--+\n|he|\n+--+"; got != want {
+	if got, want := Export(d), "┌──┐\n│he│\n└──┘"; got != want {
 		t.Errorf("Export = %q, want %q", got, want)
 	}
 }
@@ -127,7 +127,7 @@ func TestRenderBoxLabelSkippedWithoutInnerRow(t *testing.T) {
 	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 1, Label: "hi"}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if got, want := Export(d), "+--+\n+--+"; got != want {
+	if got, want := Export(d), "┌──┐\n└──┘"; got != want {
 		t.Errorf("Export = %q, want %q", got, want)
 	}
 }
@@ -140,8 +140,8 @@ func TestRenderLineKeepsBoxCorner(t *testing.T) {
 	if err := d.Apply(LineCmd{X1: 0, Y1: 0, X2: 4, Y2: 0}); err != nil {
 		t.Fatalf("Apply line: %v", err)
 	}
-	if got := d.Render()[[2]int{0, 0}]; got != '+' {
-		t.Errorf("corner = %q, want '+'", got)
+	if got := d.Render()[[2]int{0, 0}]; got != '┌' {
+		t.Errorf("corner = %q, want '┌'", got)
 	}
 }
 
@@ -151,7 +151,7 @@ func TestGridWindowHasFixedHeightAndOrigin(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 	got := d.Render().Window(3, 1, 5, 5)
-	want := "\n +-+\n | |\n +-+\n"
+	want := "\n ┌─┐\n │ │\n └─┘\n"
 	if got != want {
 		t.Errorf("Window = %q, want %q", got, want)
 	}
@@ -170,37 +170,37 @@ func TestRenderLineIsAnOrthogonalElbow(t *testing.T) {
 		{
 			name: "down then right",
 			x2:   4, y2: 3,
-			want: "|\n|\n|\n└----",
+			want: "│\n│\n│\n└────",
 		},
 		{
 			name: "down then right with an end arrow",
 			x2:   4, y2: 3, arrow: ArrowEnd,
-			want: "|\n|\n|\n└---►",
+			want: "│\n│\n│\n└───►",
 		},
 		{
 			name: "up then left",
 			x1:   4, y1: 3, x2: 0, y2: 0,
-			want: "----┐\n    |\n    |\n    |",
+			want: "────┐\n    │\n    │\n    │",
 		},
 		{
 			name: "up then right",
 			y1:   3, x2: 3,
-			want: "┌---\n|\n|\n|",
+			want: "┌───\n│\n│\n│",
 		},
 		{
 			name: "down then left",
 			x1:   3, x2: 0, y2: 3,
-			want: "   |\n   |\n   |\n---┘",
+			want: "   │\n   │\n   │\n───┘",
 		},
 		{
 			name: "straight horizontal keeps one run",
 			x2:   3,
-			want: "----",
+			want: "────",
 		},
 		{
 			name: "straight vertical keeps one run",
 			y2:   2,
-			want: "|\n|\n|",
+			want: "│\n│\n│",
 		},
 	}
 	for _, c := range cases {
@@ -226,8 +226,8 @@ func TestRenderElbowTeesIntoAnExistingLine(t *testing.T) {
 		t.Fatalf("Apply elbow: %v", err)
 	}
 	g := d.Render()
-	if got := g[[2]int{0, 1}]; got != '|' {
-		t.Errorf("first leg cell = %q, want '|'", got)
+	if got := g[[2]int{0, 1}]; got != '│' {
+		t.Errorf("first leg cell = %q, want a vertical run", got)
 	}
 	if got := g[[2]int{0, 2}]; got != '└' {
 		t.Errorf("corner = %q, want up-right corner", got)

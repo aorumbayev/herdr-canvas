@@ -291,7 +291,7 @@ func TestMoveDragPreviewsLiveAndLeavesAGhost(t *testing.T) {
 		t.Errorf("the drag mutated the diagram before release: %+v", m.d.Elements[0])
 	}
 	ghost := strings.Repeat(ghostGlyph, 3)
-	if got, want := canvasLine(t, m, 0), ghost+"  +-+"; got != want {
+	if got, want := canvasLine(t, m, 0), ghost+"  ┌─┐"; got != want {
 		t.Errorf("row 0 = %q, want %q (ghost at the source, box under the cursor)", got, want)
 	}
 
@@ -299,7 +299,7 @@ func TestMoveDragPreviewsLiveAndLeavesAGhost(t *testing.T) {
 	if got := m.d.Elements[0].X1; got != 5 {
 		t.Errorf("after release x1 = %d, want 5", got)
 	}
-	if got, want := canvasLine(t, m, 0), "     +-+"; got != want {
+	if got, want := canvasLine(t, m, 0), "     ┌─┐"; got != want {
 		t.Errorf("row 0 = %q, want %q — the ghost must not survive the commit", got, want)
 	}
 }
@@ -352,22 +352,22 @@ func TestLineAndArrowToolsRouteAsElbows(t *testing.T) {
 		{
 			name: "line bends and carries no arrow",
 			tool: toolLine, to: [2]int{4, 3}, wantArrow: canvas.ArrowNone,
-			wantRows: []string{"|", "|", "|", "└----"},
+			wantRows: []string{"│", "│", "│", "└────"},
 		},
 		{
 			name: "arrow bends and ends in an arrowhead",
 			tool: toolArrow, to: [2]int{4, 3}, wantArrow: canvas.ArrowEnd,
-			wantRows: []string{"|", "|", "|", "└---►"},
+			wantRows: []string{"│", "│", "│", "└───►"},
 		},
 		{
 			name: "a horizontal drag stays one straight run",
 			tool: toolArrow, to: [2]int{4, 0}, wantArrow: canvas.ArrowEnd,
-			wantRows: []string{"----►"},
+			wantRows: []string{"────►"},
 		},
 		{
 			name: "a vertical drag stays one straight run",
 			tool: toolLine, to: [2]int{0, 3}, wantArrow: canvas.ArrowNone,
-			wantRows: []string{"|", "|", "|", "|"},
+			wantRows: []string{"│", "│", "│", "│"},
 		},
 	}
 	for _, c := range cases {
