@@ -399,6 +399,12 @@ func (m *model) onCanvas(x, y int) bool {
 	return ok
 }
 
+func (m *model) startPan(x, y int) {
+	m.panning = true
+	m.panStart = [2]int{x, y}
+	m.panOrigin = m.vp.origin
+}
+
 func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 	ev := msg.Mouse()
 	switch msg.(type) {
@@ -434,9 +440,7 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	case tea.MouseClickMsg:
 		if ev.Button == tea.MouseMiddle && m.onCanvas(ev.X, ev.Y) {
-			m.panning = true
-			m.panStart = [2]int{ev.X, ev.Y}
-			m.panOrigin = m.vp.origin
+			m.startPan(ev.X, ev.Y)
 			return nil
 		}
 		if ev.Button == tea.MouseLeft && (ev.Y == 0 || ev.Y == m.height-1) {
@@ -469,6 +473,9 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 		m.status = ""
 		return m.mouseMsg(msg)
 	case tea.MouseMotionMsg:
+		if !m.panning && ev.Button == tea.MouseMiddle && m.onCanvas(ev.X, ev.Y) {
+			m.startPan(ev.X, ev.Y)
+		}
 		if m.panning {
 			t := m.vp.tenths()
 			dx := (ev.X - m.panStart[0]) * 10 / t

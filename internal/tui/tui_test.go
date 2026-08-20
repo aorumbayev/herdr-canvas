@@ -195,6 +195,18 @@ func TestMiddleDragPansWhenMotionDropsButton(t *testing.T) {
 	}
 }
 
+func TestMiddleDragPansWhenPressNeverArrives(t *testing.T) {
+	m := editor(t)
+	n := len(m.d.Elements)
+	m = send(t, m, midMove(8, 4), midMove(5, 2), midUp(5, 2))
+	if len(m.d.Elements) != n {
+		t.Fatalf("pan mutated the diagram")
+	}
+	if m.vp.origin == [2]int{0, 0} {
+		t.Fatal("origin did not move")
+	}
+}
+
 func TestWheelPansCanvasNotFooter(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
