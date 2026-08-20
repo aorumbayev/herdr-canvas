@@ -26,25 +26,39 @@ def die(msg: str) -> None:
     sys.stderr.write("release-gh-status: %s\n" % msg)
     sys.exit(1)
 
-try:
-    err = open(err_file, encoding="utf-8", errors="replace").read()
-except OSError as exc:
-    die("cannot read stderr file: %s" % exc)
-
-if exitcode == 0:
+def load_stdout():
     if not out_file:
-        die("gh release view exited 0 but stdout was not captured")
+        return None
     try:
         raw = open(out_file, encoding="utf-8").read().strip()
     except OSError as exc:
         die("cannot read stdout file: %s" % exc)
     if not raw:
-        die("gh release view exited 0 with empty JSON")
+        return None
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        die("gh release view returned malformed JSON: %s" % exc)
-    if not isinstance(data, dict) or "isDraft" not in data:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+def is_not_found_payload(data) -> bool:
+    return isinstance(data, dict) and (
+        str(data.get("status")) == "404" or data.get("message") == "Not Found"
+    )
+
+try:
+    err = open(err_file, encoding="utf-8", errors="replace").read()
+except OSError as exc:
+    die("cannot read stderr file: %s" % exc)
+
+stdout_data = load_stdout()
+if is_not_found_payload(stdout_data):
+    print("missing")
+    sys.exit(0)
+
+if exitcode == 0:
+    if stdout_data is None:
+        die("gh release view exited 0 with empty JSON")
+    if not isinstance(stdout_data, dict) or "isDraft" not in stdout_data:
         die("gh release view JSON is missing isDraft")
     print("viewed")
     sys.exit(0)

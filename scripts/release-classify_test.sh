@@ -192,6 +192,8 @@ expect_status "GraphQL missing release" missing 1 "Could not resolve to a Releas
 expect_status "empty stderr is not missing" fail 1 "" ""
 expect_status "malformed JSON is not missing" fail 0 "" '{"isDraft":'
 expect_status "empty JSON is not missing" fail 0 "" ""
+expect_status "gh api 404 JSON body is missing" missing 0 "" '{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}'
+expect_status "gh api 404 with HTTP stderr is missing" missing 1 "gh: Not Found (HTTP 404)" '{"message":"Not Found","status":"404"}'
 expect_status "HTTP 401 is not missing" fail 1 "HTTP 401: Bad credentials (https://api.github.com/repos/aorumbayev/herdr-canvas/releases/tags/v0.2.0)" ""
 expect_status "HTTP 403 permission is not missing" fail 1 "HTTP 403: Resource not accessible by integration" ""
 expect_status "rate limit is not missing" fail 1 "HTTP 403: API rate limit exceeded for user ID 1" ""
