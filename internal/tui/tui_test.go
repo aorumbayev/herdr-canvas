@@ -699,22 +699,14 @@ func TestSendGoesStraightToASingleAgent(t *testing.T) {
 	if f.sentTo != "w1:p9" {
 		t.Errorf("sent to %q, want w1:p9", f.sentTo)
 	}
-	if !strings.Contains(f.sentText, "┌───┐") {
-		t.Errorf("the prompt carries no diagram:\n%s", f.sentText)
+	if !strings.Contains(f.sentText, `herdr-canvas --name "demo" export`) {
+		t.Errorf("the prompt does not name export:\n%s", f.sentText)
 	}
-	if !strings.Contains(f.sentText, `N="demo"`) {
-		t.Errorf("the prompt does not bind the diagram name:\n%s", f.sentText)
+	if !strings.Contains(f.sentText, "herdr-canvas skill") {
+		t.Errorf("the prompt does not name skill:\n%s", f.sentText)
 	}
-	if !strings.Contains(f.sentText, `--name "$N" export`) {
-		t.Errorf("the prompt does not say how to read the diagram back:\n%s", f.sentText)
-	}
-	// An agent that stops to find the binary or to read SKILL.md burns minutes
-	// before it draws. The message must make both detours unnecessary.
-	if !strings.Contains(f.sentText, "on your PATH") {
-		t.Errorf("the prompt does not say the binary is ready to run:\n%s", f.sentText)
-	}
-	if strings.Contains(f.sentText, "herdr-canvas skill") {
-		t.Errorf("the prompt sends the agent away to read the skill:\n%s", f.sentText)
+	if strings.Contains(f.sentText, "┌───┐") {
+		t.Errorf("the prompt pasted the picture:\n%s", f.sentText)
 	}
 	if !strings.Contains(m.status, "added demo") {
 		t.Errorf("status = %q, want an added report", m.status)

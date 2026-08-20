@@ -99,15 +99,17 @@ trailing whitespace trimmed, e.g.:
 
 ## The canvas can send you the diagram
 
-A person drawing in the canvas presses `s`. herdr writes the diagram, its
-elements, and the command set into your input. The person then adds their own
-request and submits it.
+A person drawing in the canvas presses `s`. herdr writes two commands into
+your input: `herdr-canvas --name <name> export` to print what they see, and
+`herdr-canvas skill` to print this document. Skip `skill` if you already ran
+it in this session. Run `export` every time — the picture may have changed.
 
-That message is enough to start. Do not search for the binary: `herdr-canvas`
-is on your PATH. Do not read this document first: the message carries the
-coordinate rule and the line rule, which is all a first edit needs. Read the
-diagram again with `export` after every change, because the person keeps
-drawing while you work.
+After `export`, say in one or two sentences what you see. Ask whether they
+want to draw or change anything, unless they already said what to do. They
+submit the message. Nothing runs until they do.
+
+Read the diagram again with `export` after every change, because the person
+keeps drawing while you work.
 
 ## Installation side effect
 

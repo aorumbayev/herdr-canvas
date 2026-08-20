@@ -5,6 +5,10 @@
 <p align="center">Draw ASCII diagrams in your terminal. Let your agent read and edit them.</p>
 
 <p align="center">
+  <img src="docs/assets/canvas.svg" alt="herdr-canvas pane: draw a box, connect it, label it, send it to an agent" width="880" />
+</p>
+
+<p align="center">
   <a href="#install">Install</a> · <a href="#draw-your-first-diagram">First diagram</a> · <a href="#let-your-agent-edit-the-diagram">Agents</a>
 </p>
 
@@ -97,10 +101,11 @@ canvas has no save key.
 
 ## Send the diagram to the agent beside you
 
-Press `s`. The canvas writes the diagram into the agent's input: the picture as
-text, the list of its elements, and the commands that change it. It does not
-press enter. herdr focuses the agent pane, you add what you want done, and you
-submit it. Nothing reaches the agent until you do.
+Press `s`. The canvas writes two commands into the agent's input: `export` of
+the open diagram, and `skill` (skip `skill` if the agent already ran it in
+this session). It does not paste the picture and it does not press enter.
+herdr focuses the agent pane, you add what you want done, and you submit it.
+Nothing reaches the agent until you do.
 
 One agent in the workspace receives the diagram at once. When the workspace
 holds more than one agent, the canvas lists them and you choose:
