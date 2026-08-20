@@ -72,6 +72,7 @@ Pick a tool with one key, then drag with the left mouse button:
 | --- | ---------------- |
 | `b` | Box              |
 | `l` | Line             |
+| `a` | Arrow            |
 | `t` | Text             |
 | `d` | Draw (freeform)  |
 | `m` | Move             |
@@ -79,7 +80,8 @@ Pick a tool with one key, then drag with the left mouse button:
 | `s` | Save             |
 | `q` | Quit             |
 
-A line runs on one axis, then on the other axis. The bend gets a corner glyph.
+A line and an arrow run on one axis, then on the other axis. The bend gets a
+corner glyph. An arrow gets one arrowhead at its end.
 
 The arrow keys move a cursor, and space or enter anchors and commits, so you
 can draw the same shapes without a mouse. Every change saves at once.

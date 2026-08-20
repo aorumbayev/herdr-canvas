@@ -341,20 +341,39 @@ func TestTextEscapeDiscardsTheInPlacePreview(t *testing.T) {
 	}
 }
 
-func TestLineToolRoutesAsAnElbow(t *testing.T) {
+func TestLineAndArrowToolsRouteAsElbows(t *testing.T) {
 	cases := []struct {
-		name     string
-		to       [2]int
-		wantRows []string
+		name      string
+		tool      tool
+		to        [2]int
+		wantArrow canvas.Arrow
+		wantRows  []string
 	}{
-		{name: "a diagonal drag bends", to: [2]int{4, 3}, wantRows: []string{"|", "|", "|", "└----"}},
-		{name: "a horizontal drag stays one straight run", to: [2]int{4, 0}, wantRows: []string{"-----"}},
-		{name: "a vertical drag stays one straight run", to: [2]int{0, 3}, wantRows: []string{"|", "|", "|", "|"}},
+		{
+			name: "line bends and carries no arrow",
+			tool: toolLine, to: [2]int{4, 3}, wantArrow: canvas.ArrowNone,
+			wantRows: []string{"|", "|", "|", "└----"},
+		},
+		{
+			name: "arrow bends and ends in an arrowhead",
+			tool: toolArrow, to: [2]int{4, 3}, wantArrow: canvas.ArrowEnd,
+			wantRows: []string{"|", "|", "|", "└---►"},
+		},
+		{
+			name: "a horizontal drag stays one straight run",
+			tool: toolArrow, to: [2]int{4, 0}, wantArrow: canvas.ArrowEnd,
+			wantRows: []string{"----►"},
+		},
+		{
+			name: "a vertical drag stays one straight run",
+			tool: toolLine, to: [2]int{0, 3}, wantArrow: canvas.ArrowNone,
+			wantRows: []string{"|", "|", "|", "|"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			m := editor(t)
-			m.tool = toolLine
+			m.tool = c.tool
 			m = send(t, m,
 				left(0, headerRows, tea.MouseActionPress),
 				left(c.to[0], c.to[1]+headerRows, tea.MouseActionMotion),
@@ -365,8 +384,12 @@ func TestLineToolRoutesAsAnElbow(t *testing.T) {
 				}
 			}
 			m = send(t, m, left(c.to[0], c.to[1]+headerRows, tea.MouseActionRelease))
-			if len(m.d.Elements) != 1 || m.d.Elements[0].Type != canvas.Line {
-				t.Fatalf("elements = %+v, want one line", m.d.Elements)
+			if len(m.d.Elements) != 1 {
+				t.Fatalf("elements = %d, want 1", len(m.d.Elements))
+			}
+			e := m.d.Elements[0]
+			if e.Type != canvas.Line || e.Arrow != c.wantArrow {
+				t.Errorf("element = %+v, want a line with arrow %q", e, c.wantArrow)
 			}
 			for i, want := range c.wantRows {
 				if got := canvasLine(t, m, i); got != want {
@@ -374,5 +397,17 @@ func TestLineToolRoutesAsAnElbow(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestArrowToolKeyIsSeparateFromLine(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, key("a"))
+	if m.tool != toolArrow {
+		t.Fatalf("tool = %v, want the arrow tool", m.tool)
+	}
+	m = send(t, m, key("l"))
+	if m.tool != toolLine {
+		t.Errorf("tool = %v, want the line tool", m.tool)
 	}
 }

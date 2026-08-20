@@ -26,6 +26,7 @@ type tool int
 const (
 	toolBox tool = iota
 	toolLine
+	toolArrow
 	toolText
 	toolDraw
 	toolMove
@@ -35,6 +36,7 @@ const (
 var toolNames = map[tool]string{
 	toolBox:    "box",
 	toolLine:   "line",
+	toolArrow:  "arrow",
 	toolText:   "text",
 	toolDraw:   "draw",
 	toolMove:   "move",
@@ -257,7 +259,7 @@ func (m *model) typeKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
-	case "b", "l", "t", "d", "m", "x":
+	case "b", "l", "a", "t", "d", "m", "x":
 		m.tool = toolFor(msg.String())
 		m.grabID = ""
 		m.mouse = false
@@ -378,9 +380,12 @@ func (m *model) commit() {
 		x1, y1 := min(m.anchor[0], m.cursor[0]), min(m.anchor[1], m.cursor[1])
 		x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
 		m.apply(canvas.BoxCmd{X1: x1, Y1: y1, X2: x2, Y2: y2})
-	case toolLine:
+	case toolLine, toolArrow:
 		start, end := m.snap(m.anchor), m.snap(m.cursor)
-		m.apply(canvas.LineCmd{X1: start[0], Y1: start[1], X2: end[0], Y2: end[1]})
+		m.apply(canvas.LineCmd{
+			X1: start[0], Y1: start[1], X2: end[0], Y2: end[1],
+			Arrow: m.lineArrow(),
+		})
 	case toolDraw:
 		if len(m.pending) > 0 {
 			m.apply(canvas.DrawCmd{Cells: m.drawCells()})
@@ -592,6 +597,13 @@ func ghostCells(e canvas.Element) []canvas.Cell {
 	return cells
 }
 
+func (m model) lineArrow() canvas.Arrow {
+	if m.tool == toolArrow {
+		return canvas.ArrowEnd
+	}
+	return canvas.ArrowNone
+}
+
 func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 	elems := make([]canvas.Element, len(m.d.Elements), len(m.d.Elements)+1)
 	copy(elems, m.d.Elements)
@@ -603,9 +615,12 @@ func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 		x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
 		elems = append(elems, canvas.Element{Type: canvas.Box, X1: x1, Y1: y1, X2: x2, Y2: y2})
 	}
-	if m.tool == toolLine {
+	if m.tool == toolLine || m.tool == toolArrow {
 		start, end := m.snap(m.anchor), m.snap(m.cursor)
-		elems = append(elems, canvas.Element{Type: canvas.Line, X1: start[0], Y1: start[1], X2: end[0], Y2: end[1]})
+		elems = append(elems, canvas.Element{
+			Type: canvas.Line, X1: start[0], Y1: start[1], X2: end[0], Y2: end[1],
+			Arrow: m.lineArrow(),
+		})
 	}
 	if m.tool == toolMove && m.grabID != "" {
 		elems = m.movePreview(elems)
@@ -636,7 +651,7 @@ func (m model) statusLine() string {
 	if m.anchored {
 		extra += fmt.Sprintf(" · anchor (%d,%d)", m.anchor[0], m.anchor[1])
 	}
-	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/t/d/m/x tool · drag mouse · arrows+space · s save · q quit",
+	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/a/t/d/m/x tool · drag mouse · arrows+space · s save · q quit",
 		toolNames[m.tool], m.cursor[0], m.cursor[1], extra)
 }
 
@@ -646,6 +661,8 @@ func toolFor(k string) tool {
 		return toolBox
 	case "l":
 		return toolLine
+	case "a":
+		return toolArrow
 	case "t":
 		return toolText
 	case "d":
