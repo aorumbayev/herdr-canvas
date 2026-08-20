@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -22,6 +23,42 @@ func launchCmd() *cobra.Command {
 			return toggle(herdr.New(), herdr.Workspace())
 		},
 	}
+}
+
+// paneCwd returns the directory of the pane the person invoked the hotkey
+// from. The canvas names its diagram after that directory, so the wrong answer
+// opens the wrong diagram.
+//
+// The working directory of this process is the plugin root, which is a
+// detached checkout of this repository. Naming a diagram after it produces
+// repo@<commit> and gives a different diagram for every installed version, so
+// paneCwd refuses it.
+func paneCwd() (string, error) {
+	if p := os.Getenv("HERDR_ACTIVE_PANE_CWD"); p != "" {
+		return p, nil
+	}
+	if raw := os.Getenv("HERDR_PLUGIN_CONTEXT_JSON"); raw != "" {
+		var ctx struct {
+			FocusedPaneCwd string `json:"focused_pane_cwd"`
+			WorkspaceCwd   string `json:"workspace_cwd"`
+		}
+		if err := json.Unmarshal([]byte(raw), &ctx); err == nil {
+			if ctx.FocusedPaneCwd != "" {
+				return ctx.FocusedPaneCwd, nil
+			}
+			if ctx.WorkspaceCwd != "" {
+				return ctx.WorkspaceCwd, nil
+			}
+		}
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	if root := os.Getenv("HERDR_PLUGIN_ROOT"); root != "" && wd == root {
+		return "", fmt.Errorf("cannot tell which pane this is; herdr set no pane directory")
+	}
+	return wd, nil
 }
 
 // paneHost is the part of the herdr client that toggle uses. The interface
@@ -64,13 +101,9 @@ func toggle(c paneHost, workspace string) error {
 		return nil
 	}
 
-	cwd := os.Getenv("HERDR_ACTIVE_PANE_CWD")
-	if cwd == "" {
-		var err error
-		cwd, err = os.Getwd()
-		if err != nil {
-			return err
-		}
+	cwd, err := paneCwd()
+	if err != nil {
+		return err
 	}
 	return c.OpenSplit(cwd)
 }

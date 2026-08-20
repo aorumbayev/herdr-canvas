@@ -124,6 +124,12 @@ func Run(cwd string) error {
 				return lerr
 			}
 			d = &canvas.Diagram{Name: n}
+			// Write the new diagram at once. An agent that gets the diagram
+			// reads it by name, and a diagram that only exists in memory
+			// makes that read fail.
+			if serr := s.Save(d); serr != nil {
+				return serr
+			}
 		}
 		m.d = d
 		m.mtime, _ = s.ModTime(n)
