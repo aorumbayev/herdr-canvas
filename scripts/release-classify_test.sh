@@ -191,7 +191,7 @@ expect_status "HTTP 404 tag URL" missing 1 "HTTP 404: Not Found (https://api.git
 expect_status "GraphQL missing release" missing 1 "Could not resolve to a Release with tag name v0.2.0" ""
 expect_status "empty stderr is not missing" fail 1 "" ""
 expect_status "malformed JSON is not missing" fail 0 "" '{"isDraft":'
-expect_status "empty JSON is not missing" fail 0 "" ""
+expect_status "HTTP 404 stderr even when exit is 0" missing 0 "HTTP 404: Not Found (https://api.github.com/repos/aorumbayev/herdr-canvas/releases/tags/v0.2.0)" ""
 expect_status "gh api 404 JSON body is missing" missing 0 "" '{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}'
 expect_status "gh api 404 with HTTP stderr is missing" missing 1 "gh: Not Found (HTTP 404)" '{"message":"Not Found","status":"404"}'
 expect_status "HTTP 401 is not missing" fail 1 "HTTP 401: Bad credentials (https://api.github.com/repos/aorumbayev/herdr-canvas/releases/tags/v0.2.0)" ""
@@ -201,10 +201,10 @@ expect_status "HTTP 429 is not missing" fail 1 "HTTP 429: Too Many Requests" ""
 expect_status "network DNS is not missing" fail 1 "Get \"https://api.github.com/repos/aorumbayev/herdr-canvas/releases/tags/v0.2.0\": dial tcp: lookup api.github.com: no such host" ""
 expect_status "connection refused is not missing" fail 1 "dial tcp 127.0.0.1:443: connect: connection refused" ""
 
-if grep -A2 'gh_st' "$repo/.github/workflows/release.yml" | grep -q 'CLASS=missing'; then
-	not_ok "workflow must not set CLASS=missing from gh_st alone"
+if grep -q 'if ! ./scripts/release-view.sh' "$repo/.github/workflows/release.yml"; then
+	not_ok "workflow must not use if ! to capture release-view exit"
 else
-	ok "workflow does not treat every gh failure as missing"
+	ok "workflow captures release-view exit without if !"
 fi
 
 if grep -q 'release-gh-status.sh' "$repo/.github/workflows/release.yml"; then

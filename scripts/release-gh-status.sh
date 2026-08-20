@@ -50,6 +50,19 @@ try:
 except OSError as exc:
     die("cannot read stderr file: %s" % exc)
 
+err_l = err.lower()
+if any(
+    needle in err_l
+    for needle in (
+        "release not found",
+        "http 404",
+        "could not resolve to a release",
+        "could not find release",
+    )
+):
+    print("missing")
+    sys.exit(0)
+
 stdout_data = load_stdout()
 if is_not_found_payload(stdout_data):
     print("missing")
