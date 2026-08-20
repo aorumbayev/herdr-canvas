@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"herdr-canvas/internal/canvas"
 	"herdr-canvas/internal/herdr"
@@ -23,7 +23,8 @@ func editor(t *testing.T) model {
 	if err != nil {
 		t.Fatalf("ModTime: %v", err)
 	}
-	return model{s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox, width: 40, height: 12}
+	return model{s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox, width: 40, height: 12,
+		vp: viewport{zoom: 1}}
 }
 
 func send(t *testing.T, m model, msgs ...tea.Msg) model {
@@ -35,24 +36,63 @@ func send(t *testing.T, m model, msgs ...tea.Msg) model {
 	return m
 }
 
-func mouse(x, y int, action tea.MouseAction, button tea.MouseButton) tea.MouseMsg {
-	return tea.MouseMsg{X: x, Y: y, Action: action, Button: button}
-}
+func screen(m model) string { return m.View().Content }
 
-func left(x, y int, action tea.MouseAction) tea.MouseMsg {
-	return mouse(x, y, action, tea.MouseButtonLeft)
-}
-
-func key(s string) tea.KeyMsg {
-	if s == " " {
-		return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
+func key(s string) tea.KeyPressMsg {
+	switch s {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEsc}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
+	case "backspace":
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
+	case " ", "space":
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+	default:
+		r := []rune(s)
+		return tea.KeyPressMsg{Code: r[0], Text: s}
 	}
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+}
+
+func ctrlZ() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl} }
+func ctrlY() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl} }
+func ctrlShiftZ() tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl | tea.ModShift}
+}
+
+func leftDown(x, y int) tea.MouseClickMsg {
+	return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}
+}
+func leftMove(x, y int) tea.MouseMotionMsg {
+	return tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseLeft}
+}
+func leftUp(x, y int) tea.MouseReleaseMsg {
+	return tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}
+}
+func midDown(x, y int) tea.MouseClickMsg {
+	return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseMiddle}
+}
+func midMove(x, y int) tea.MouseMotionMsg {
+	return tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseMiddle}
+}
+func midUp(x, y int) tea.MouseReleaseMsg {
+	return tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseMiddle}
+}
+func wheelAt(x, y int, btn tea.MouseButton, mod tea.KeyMod) tea.MouseWheelMsg {
+	return tea.MouseWheelMsg{X: x, Y: y, Button: btn, Mod: mod}
 }
 
 func TestCanvasPointUsesFixedOrigin(t *testing.T) {
 	m := editor(t)
-	m.origin = [2]int{5, 7}
+	m.vp.origin = [2]int{5, 7}
 	cases := []struct {
 		x, y   int
 		want   [2]int
@@ -73,6 +113,29 @@ func TestCanvasPointUsesFixedOrigin(t *testing.T) {
 	}
 }
 
+func TestEnsureVisibleMovesOrigin(t *testing.T) {
+	cases := []struct {
+		name   string
+		zoom   int
+		cursor [2]int
+		want   [2]int
+	}{
+		{"1x right and down", 1, [2]int{50, 15}, [2]int{11, 6}},
+		{"2x right and down", 2, [2]int{25, 8}, [2]int{6, 4}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := editor(t)
+			m.vp = viewport{zoom: c.zoom}
+			m.cursor = c.cursor
+			m.ensureVisible()
+			if m.vp.origin != c.want {
+				t.Errorf("origin = %v, want %v", m.vp.origin, c.want)
+			}
+		})
+	}
+}
+
 func TestCanvasPointIgnoresRenderedContent(t *testing.T) {
 	m := editor(t)
 	if err := m.d.Apply(canvas.BoxCmd{X1: 20, Y1: 20, X2: 22, Y2: 22}); err != nil {
@@ -87,9 +150,9 @@ func TestCanvasPointIgnoresRenderedContent(t *testing.T) {
 func TestMouseDragDrawsBoxUnderThePointer(t *testing.T) {
 	m := editor(t)
 	m = send(t, m,
-		left(10, 5, tea.MouseActionPress),
-		left(14, 8, tea.MouseActionMotion),
-		left(14, 8, tea.MouseActionRelease),
+		leftDown(10, 5),
+		leftMove(14, 8),
+		leftUp(14, 8),
 	)
 	if len(m.d.Elements) != 1 {
 		t.Fatalf("elements = %d, want 1", len(m.d.Elements))
@@ -105,20 +168,93 @@ func TestMouseDragDrawsBoxUnderThePointer(t *testing.T) {
 	}
 }
 
+func TestMiddleDragPansAndDoesNotDraw(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 4, Y2: 4}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	n := len(m.d.Elements)
+	m = send(t, m, midDown(8, 4), midMove(5, 2), midUp(5, 2))
+	if len(m.d.Elements) != n {
+		t.Fatalf("middle drag mutated the diagram")
+	}
+	if m.vp.origin == [2]int{0, 0} {
+		t.Fatal("origin did not move")
+	}
+}
+
+func TestWheelPansCanvasNotFooter(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
+	before := m.vp.origin
+	m = send(t, m, wheelAt(2, 11, tea.MouseWheelDown, 0))
+	if m.vp.origin != before {
+		t.Errorf("footer wheel panned: %v", m.vp.origin)
+	}
+	m = send(t, m, wheelAt(2, 3, tea.MouseWheelDown, 0))
+	if m.vp.origin[1] != before[1]+1 {
+		t.Errorf("origin = %v, want y+1", m.vp.origin)
+	}
+	m = send(t, m, wheelAt(2, 3, tea.MouseWheelDown, tea.ModShift))
+	if m.vp.origin[0] != 1 {
+		t.Errorf("shift+wheel origin.x = %d, want 1", m.vp.origin[0])
+	}
+}
+
+func TestCtrlWheelSetsZoomWithoutPan(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
+	m = send(t, m, wheelAt(2, 3, tea.MouseWheelUp, tea.ModCtrl))
+	if m.vp.zoom != 2 {
+		t.Errorf("zoom = %d, want 2", m.vp.zoom)
+	}
+	if m.vp.origin != [2]int{0, 0} {
+		t.Errorf("ctrl+wheel panned: %v", m.vp.origin)
+	}
+	m = send(t, m, wheelAt(2, 3, tea.MouseWheelUp, tea.ModCtrl))
+	if m.vp.zoom != 2 {
+		t.Errorf("second zoom-in toggled: %d", m.vp.zoom)
+	}
+	m = send(t, m, wheelAt(2, 3, tea.MouseWheelDown, tea.ModCtrl))
+	if m.vp.zoom != 1 {
+		t.Errorf("zoom-out = %d, want 1", m.vp.zoom)
+	}
+}
+
+func TestPlusMinusZoom(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.KeyPressMsg{Code: '+', Text: "+"})
+	if m.vp.zoom != 2 {
+		t.Errorf("zoom = %d after +", m.vp.zoom)
+	}
+	m = send(t, m, tea.KeyPressMsg{Code: '-', Text: "-"})
+	if m.vp.zoom != 1 {
+		t.Errorf("zoom = %d after -", m.vp.zoom)
+	}
+}
+
 func TestWheelDoesNotDeleteOrDraw(t *testing.T) {
 	m := editor(t)
 	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 4, Y2: 4}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	m.tool = toolDelete
-	for _, b := range []tea.MouseButton{tea.MouseButtonWheelUp, tea.MouseButtonWheelDown, tea.MouseButtonRight, tea.MouseButtonMiddle} {
-		m = send(t, m, mouse(2, 3, tea.MouseActionPress, b))
+	for _, msg := range []tea.Msg{
+		wheelAt(2, 3, tea.MouseWheelUp, 0),
+		wheelAt(2, 3, tea.MouseWheelDown, 0),
+		tea.MouseClickMsg{X: 2, Y: 3, Button: tea.MouseRight},
+		midDown(2, 3),
+	} {
+		m = send(t, m, msg)
 		if len(m.d.Elements) != 1 {
-			t.Fatalf("button %v deleted the element", b)
+			t.Fatalf("msg %T deleted the element", msg)
 		}
 	}
 	m.tool = toolBox
-	m = send(t, m, mouse(2, 3, tea.MouseActionPress, tea.MouseButtonWheelUp), mouse(6, 6, tea.MouseActionRelease, tea.MouseButtonWheelUp))
+	m = send(t, m,
+		wheelAt(2, 3, tea.MouseWheelUp, 0),
+		wheelAt(6, 6, tea.MouseWheelUp, 0),
+	)
 	if len(m.d.Elements) != 1 {
 		t.Errorf("wheel committed a box: %d elements", len(m.d.Elements))
 	}
@@ -127,7 +263,7 @@ func TestWheelDoesNotDeleteOrDraw(t *testing.T) {
 func TestReleaseWithoutPressCommitsNothing(t *testing.T) {
 	m := editor(t)
 	m.anchor = [2]int{2, 2}
-	m = send(t, m, left(9, 9, tea.MouseActionRelease))
+	m = send(t, m, leftUp(9, 9))
 	if len(m.d.Elements) != 0 {
 		t.Errorf("elements = %d, want 0", len(m.d.Elements))
 	}
@@ -136,7 +272,7 @@ func TestReleaseWithoutPressCommitsNothing(t *testing.T) {
 func TestToolSwitchClearsAnchorAndPending(t *testing.T) {
 	m := editor(t)
 	m.tool = toolDraw
-	m = send(t, m, left(3, 3, tea.MouseActionPress), left(4, 3, tea.MouseActionMotion))
+	m = send(t, m, leftDown(3, 3), leftMove(4, 3))
 	if len(m.pending) == 0 {
 		t.Fatal("draw collected no cells")
 	}
@@ -145,7 +281,7 @@ func TestToolSwitchClearsAnchorAndPending(t *testing.T) {
 		t.Errorf("tool switch left state: pending=%v anchored=%v mouse=%v anchor=%v",
 			m.pending, m.anchored, m.mouse, m.anchor)
 	}
-	m = send(t, m, left(9, 9, tea.MouseActionRelease))
+	m = send(t, m, leftUp(9, 9))
 	if len(m.d.Elements) != 0 {
 		t.Errorf("stale anchor committed an element: %+v", m.d.Elements)
 	}
@@ -155,8 +291,8 @@ func TestKeyboardAnchorAndCommitDrawsBox(t *testing.T) {
 	m := editor(t)
 	m = send(t, m,
 		key(" "),
-		tea.KeyMsg{Type: tea.KeyRight}, tea.KeyMsg{Type: tea.KeyRight},
-		tea.KeyMsg{Type: tea.KeyDown},
+		key("right"), key("right"),
+		key("down"),
 		key(" "),
 	)
 	if len(m.d.Elements) != 1 {
@@ -187,7 +323,7 @@ func TestExternalEditIsReloadedNotOverwritten(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	m.mtime = m.mtime.Add(-1) // the store rewrote the file behind the editor
-	m = send(t, m, left(3, 3, tea.MouseActionPress), left(6, 6, tea.MouseActionRelease))
+	m = send(t, m, leftDown(3, 3), leftUp(6, 6))
 	if len(m.d.Elements) != 2 {
 		t.Fatalf("elements = %d, want 2 (reloaded text plus the new box)", len(m.d.Elements))
 	}
@@ -207,7 +343,7 @@ func TestNamePhaseRefusesExistingName(t *testing.T) {
 	m := editor(t)
 	m.phase = phaseName
 	m.nameInput = "demo"
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = send(t, m, key("enter"))
 	if m.phase != phaseName {
 		t.Errorf("phase = %v, want phaseName", m.phase)
 	}
@@ -227,7 +363,7 @@ func TestPickerSurfacesListError(t *testing.T) {
 	m := editor(t)
 	m.phase = phasePick
 	m.status = "read store: permission denied"
-	if got := m.View(); !strings.Contains(got, "permission denied") {
+	if got := screen(m); !strings.Contains(got, "permission denied") {
 		t.Errorf("picker view hides the error: %q", got)
 	}
 }
@@ -255,13 +391,66 @@ func TestLineSnapsBothEndpoints(t *testing.T) {
 	}
 }
 
+func TestClickArrowChipSelectsArrow(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 12})
+	ch := layoutChrome(80, m.d.Name, m.vp.zoom, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), "")
+	idx := indexOf(ch.footer, "arrow")
+	m = send(t, m, leftDown(idx, 11), leftUp(idx, 11))
+	if m.tool != toolArrow {
+		t.Errorf("tool = %v, want arrow", m.tool)
+	}
+}
+
+func TestClickPaddingDoesNotSwitchTool(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 12})
+	m = send(t, m, leftDown(79, 11), leftUp(79, 11))
+	if m.tool != toolBox {
+		t.Errorf("tool = %v", m.tool)
+	}
+}
+
+func TestClickZoomChipFits(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
+	if err := m.d.Apply(canvas.BoxCmd{X1: 80, Y1: 40, X2: 90, Y2: 50}); err != nil {
+		t.Fatal(err)
+	}
+	m.vp.zoom = 2
+	ch := layoutChrome(40, m.d.Name, m.vp.zoom, m.cursor, m.tool, false, false, "")
+	idx := indexOf(ch.header, "2x")
+	if idx < 0 {
+		t.Fatalf("header %q", ch.header)
+	}
+	m = send(t, m, leftDown(idx, 0), leftUp(idx, 0))
+	if m.vp.zoom != 1 {
+		t.Errorf("zoom = %d, want 1", m.vp.zoom)
+	}
+	if m.vp.origin[0] != 80 || m.vp.origin[1] != 40 {
+		t.Errorf("origin = %v, want bbox min", m.vp.origin)
+	}
+}
+
+func TestViewFooterHasChips(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 12})
+	lines := strings.Split(screen(m), "\n")
+	if !strings.Contains(lines[0], "1x") {
+		t.Errorf("header = %q", lines[0])
+	}
+	if !strings.Contains(lines[len(lines)-1], "[box]") {
+		t.Errorf("footer = %q", lines[len(lines)-1])
+	}
+}
+
 func TestViewFillsTheTerminal(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
 	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 30}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(screen(m), "\n")
 	if len(lines) != 12 {
 		t.Fatalf("view has %d lines, want 12", len(lines))
 	}
@@ -274,7 +463,7 @@ func TestViewFillsTheTerminal(t *testing.T) {
 // first row below the header.
 func canvasLine(t *testing.T, m model, row int) string {
 	t.Helper()
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(screen(m), "\n")
 	if row+headerRows >= len(lines) {
 		t.Fatalf("row %d is outside the view (%d lines)", row, len(lines))
 	}
@@ -287,7 +476,7 @@ func TestMoveDragPreviewsLiveAndLeavesAGhost(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 	m.tool = toolMove
-	m = send(t, m, left(1, 1, tea.MouseActionPress), left(6, 1, tea.MouseActionMotion))
+	m = send(t, m, leftDown(1, 1), leftMove(6, 1))
 
 	if m.d.Elements[0].X1 != 0 {
 		t.Errorf("the drag mutated the diagram before release: %+v", m.d.Elements[0])
@@ -297,7 +486,7 @@ func TestMoveDragPreviewsLiveAndLeavesAGhost(t *testing.T) {
 		t.Errorf("row 0 = %q, want %q (ghost at the source, box under the cursor)", got, want)
 	}
 
-	m = send(t, m, left(6, 1, tea.MouseActionRelease))
+	m = send(t, m, leftUp(6, 1))
 	if got := m.d.Elements[0].X1; got != 5 {
 		t.Errorf("after release x1 = %d, want 5", got)
 	}
@@ -309,7 +498,7 @@ func TestMoveDragPreviewsLiveAndLeavesAGhost(t *testing.T) {
 func TestTextRendersAtTheClickedCellWhileTyping(t *testing.T) {
 	m := editor(t)
 	m.tool = toolText
-	m = send(t, m, left(3, 2, tea.MouseActionPress), key("h"), key("i"))
+	m = send(t, m, leftDown(3, 2), key("h"), key("i"))
 
 	if len(m.d.Elements) != 0 {
 		t.Fatalf("typing committed early: %+v", m.d.Elements)
@@ -322,7 +511,7 @@ func TestTextRendersAtTheClickedCellWhileTyping(t *testing.T) {
 		t.Errorf("the buffer is still echoed in the status line: %q", m.statusLine())
 	}
 
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = send(t, m, key("enter"))
 	if len(m.d.Elements) != 1 || m.d.Elements[0].Text != "hi" {
 		t.Fatalf("enter did not commit the text: %+v", m.d.Elements)
 	}
@@ -334,7 +523,7 @@ func TestTextRendersAtTheClickedCellWhileTyping(t *testing.T) {
 func TestTextEscapeDiscardsTheInPlacePreview(t *testing.T) {
 	m := editor(t)
 	m.tool = toolText
-	m = send(t, m, left(3, 2, tea.MouseActionPress), key("h"), tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, leftDown(3, 2), key("h"), key("esc"))
 	if len(m.d.Elements) != 0 {
 		t.Fatalf("escape committed text: %+v", m.d.Elements)
 	}
@@ -377,15 +566,15 @@ func TestLineAndArrowToolsRouteAsElbows(t *testing.T) {
 			m := editor(t)
 			m.tool = c.tool
 			m = send(t, m,
-				left(0, headerRows, tea.MouseActionPress),
-				left(c.to[0], c.to[1]+headerRows, tea.MouseActionMotion),
+				leftDown(0, headerRows),
+				leftMove(c.to[0], c.to[1]+headerRows),
 			)
 			for i, want := range c.wantRows {
 				if got := canvasLine(t, m, i); got != want {
 					t.Errorf("preview row %d = %q, want %q", i, got, want)
 				}
 			}
-			m = send(t, m, left(c.to[0], c.to[1]+headerRows, tea.MouseActionRelease))
+			m = send(t, m, leftUp(c.to[0], c.to[1]+headerRows))
 			if len(m.d.Elements) != 1 {
 				t.Fatalf("elements = %d, want 1", len(m.d.Elements))
 			}
@@ -493,7 +682,7 @@ func TestSendOpensAPickerForSeveralAgents(t *testing.T) {
 	if f.sentTo != "" {
 		t.Errorf("sent to %q before a choice was made", f.sentTo)
 	}
-	view := m.View()
+	view := screen(m)
 	for _, want := range []string{"w1:p1", "w1:p2", "claude", "opencode"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("picker does not list %q:\n%s", want, view)
@@ -514,7 +703,7 @@ func TestSendPickerEscapeSendsNothing(t *testing.T) {
 		herdr.Agent{PaneID: "w1:p1", Agent: "claude"},
 		herdr.Agent{PaneID: "w1:p2", Agent: "claude"},
 	)
-	m = send(t, m, key("s"), tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, key("s"), key("esc"))
 	if f.sentTo != "" {
 		t.Errorf("escape still sent to %q", f.sentTo)
 	}
@@ -548,7 +737,7 @@ func TestAgentPickerNamesTheTabAndWorkspace(t *testing.T) {
 	)
 	m.width = 78
 	m = send(t, m, key("s"))
-	view := m.View()
+	view := screen(m)
 	for _, want := range []string{"control", "review-prose", "ship", "workspace: herdr-canvas"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("picker does not name %q:\n%s", want, view)
@@ -585,7 +774,7 @@ func TestEscapeReturnsToThePickerWithAFreshList(t *testing.T) {
 	}
 	m.names = []string{"demo"}
 
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, key("esc"))
 	if m.phase != phasePick {
 		t.Fatalf("phase = %v, want the picker", m.phase)
 	}
@@ -605,11 +794,11 @@ func TestEscapeReturnsToThePickerWithAFreshList(t *testing.T) {
 
 func TestPickerEscapeGoesBackToTheOpenDiagram(t *testing.T) {
 	m := editor(t)
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, key("esc"))
 	if m.phase != phasePick {
 		t.Fatalf("phase = %v, want the picker", m.phase)
 	}
-	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, key("esc"))
 	if m.phase != phaseEdit {
 		t.Errorf("phase = %v, want the editor again", m.phase)
 	}
@@ -618,7 +807,7 @@ func TestPickerEscapeGoesBackToTheOpenDiagram(t *testing.T) {
 func TestEscapeWhileTypingDoesNotLeaveTheEditor(t *testing.T) {
 	m := editor(t)
 	m.tool = toolText
-	m = send(t, m, left(3, 2, tea.MouseActionPress), key("h"), tea.KeyMsg{Type: tea.KeyEsc})
+	m = send(t, m, leftDown(3, 2), key("h"), key("esc"))
 	if m.phase != phaseEdit {
 		t.Errorf("phase = %v, want the editor — escape cancels the text entry", m.phase)
 	}
@@ -654,10 +843,62 @@ func TestPollShowsAChangeAnAgentMade(t *testing.T) {
 	}
 }
 
+func TestApplyThenUndoRestores(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, leftDown(2, 2), leftMove(6, 5), leftUp(6, 5))
+	if len(m.d.Elements) != 1 {
+		t.Fatalf("elements = %d", len(m.d.Elements))
+	}
+	m = send(t, m, ctrlZ())
+	if len(m.d.Elements) != 0 {
+		t.Errorf("undo left %d elements", len(m.d.Elements))
+	}
+	reloaded, err := m.s.Load("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.Elements) != 0 {
+		t.Error("undo did not save")
+	}
+	m = send(t, m, ctrlY())
+	if len(m.d.Elements) != 1 || m.d.Elements[0].ID != "b1" {
+		t.Errorf("redo = %+v", m.d.Elements)
+	}
+}
+
+func TestFailedApplyDoesNotPush(t *testing.T) {
+	m := editor(t)
+	m.tool = toolMove
+	m = send(t, m, key(" "))
+	if m.hist.canUndo() {
+		t.Fatal("empty move pushed history")
+	}
+}
+
+func TestReloadIsOneUndoStep(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, leftDown(2, 2), leftUp(4, 4))
+	other := &canvas.Diagram{Name: "demo"}
+	if err := other.Apply(canvas.TextCmd{X: 1, Y: 1, Text: "agent"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.s.Save(other); err != nil {
+		t.Fatal(err)
+	}
+	m = send(t, m, pollMsg{})
+	if len(m.d.Elements) != 1 || m.d.Elements[0].Type != canvas.Text {
+		t.Fatalf("reload = %+v", m.d.Elements)
+	}
+	m = send(t, m, ctrlZ())
+	if len(m.d.Elements) != 1 || m.d.Elements[0].Type != canvas.Box {
+		t.Errorf("undo reload = %+v", m.d.Elements)
+	}
+}
+
 func TestPollLeavesADragAlone(t *testing.T) {
 	m := editor(t)
 	m.tool = toolBox
-	m = send(t, m, left(2, 2, tea.MouseActionPress), left(6, 5, tea.MouseActionMotion))
+	m = send(t, m, leftDown(2, 2), leftMove(6, 5))
 
 	d, _ := m.s.Load("demo")
 	_ = d.Apply(canvas.BoxCmd{X1: 20, Y1: 0, X2: 24, Y2: 2})
@@ -674,5 +915,37 @@ func TestPollLeavesADragAlone(t *testing.T) {
 	}
 	if !m.mouse {
 		t.Error("the drag was cancelled by the poll")
+	}
+}
+
+func TestUndoDuringBoxDragDiscardsPreview(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, leftDown(2, 2), leftMove(6, 5))
+	if !m.mouse {
+		t.Fatal("expected drag")
+	}
+	m = send(t, m, ctrlZ())
+	if m.mouse || m.anchored {
+		t.Fatal("drag still live")
+	}
+	if len(m.d.Elements) != 0 {
+		t.Errorf("discard undid committed work: %+v", m.d.Elements)
+	}
+}
+
+func TestUndoDuringTextCommitsThenSecondUndoRemovesIt(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("h"), key("i"), ctrlZ())
+	if !m.typing {
+		if len(m.d.Elements) != 1 || m.d.Elements[0].Text != "hi" {
+			t.Fatalf("first undo did not commit: %+v", m.d.Elements)
+		}
+	} else {
+		t.Fatal("still typing")
+	}
+	m = send(t, m, ctrlZ())
+	if len(m.d.Elements) != 0 {
+		t.Errorf("second undo = %+v", m.d.Elements)
 	}
 }

@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	bkey "charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"herdr-canvas/internal/canvas"
 	"herdr-canvas/internal/herdr"
@@ -33,6 +35,13 @@ const (
 	toolDraw
 	toolMove
 	toolDelete
+)
+
+var (
+	keyUndo    = bkey.NewBinding(bkey.WithKeys("ctrl+z"))
+	keyRedo    = bkey.NewBinding(bkey.WithKeys("ctrl+shift+z", "ctrl+y"))
+	keyZoomIn  = bkey.NewBinding(bkey.WithKeys("+", "="))
+	keyZoomOut = bkey.NewBinding(bkey.WithKeys("-"))
 )
 
 var toolNames = map[tool]string{
@@ -81,7 +90,12 @@ type model struct {
 	nameInput string
 
 	width, height int
-	origin        [2]int
+	vp            viewport
+	hist          history
+	ch            chrome
+	panning       bool
+	panStart      [2]int
+	panOrigin     [2]int
 
 	tool     tool
 	cursor   [2]int
@@ -106,6 +120,7 @@ type model struct {
 func Run(cwd string) error {
 	s := store.New()
 	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox, width: defaultW, height: defaultH,
+		vp:   viewport{zoom: 1},
 		send: herdr.New(), workspace: herdr.Workspace()}
 
 	nm, err := name.Composite(cwd)
@@ -150,12 +165,12 @@ func RunNamed(n string) error {
 	return run(model{
 		s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox,
 		width: defaultW, height: defaultH,
+		vp: viewport{zoom: 1},
 	})
 }
 
 func run(m model) error {
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	_, err := p.Run()
+	_, err := tea.NewProgram(m).Run()
 	return err
 }
 
@@ -187,7 +202,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.ensureVisible()
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		m.status = ""
 		switch m.phase {
 		case phasePick:
@@ -200,6 +215,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := m.agentKey(msg)
 			return m, cmd
 		case phaseEdit:
+			if m.typing && bkey.Matches(msg, keyUndo) {
+				m.doUndo()
+				return m, nil
+			}
+			if m.typing && bkey.Matches(msg, keyRedo) {
+				m.doRedo()
+				return m, nil
+			}
 			if m.typing {
 				cmd := m.typeKey(msg)
 				return m, cmd
@@ -208,16 +231,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	case tea.MouseMsg:
-		if m.phase == phaseEdit && !m.typing {
-			m.status = ""
-			cmd := m.mouseMsg(msg)
-			return m, cmd
+		if m.phase != phaseEdit {
+			return m, nil
 		}
+		cmd := m.mouseRoute(msg)
+		return m, cmd
 	}
 	return m, nil
 }
 
-func (m *model) pickKey(msg tea.KeyMsg) tea.Cmd {
+func (m *model) pickKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "up", "k":
 		if m.sel > 0 {
@@ -274,7 +297,7 @@ func (m *model) toPicker() {
 	m.phase = phasePick
 }
 
-func (m *model) nameKey(msg tea.KeyMsg) tea.Cmd {
+func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
 		if m.nameInput == "" {
@@ -302,14 +325,14 @@ func (m *model) nameKey(msg tea.KeyMsg) tea.Cmd {
 			m.nameInput = m.nameInput[:len(m.nameInput)-1]
 		}
 	default:
-		if len(msg.String()) == 1 {
-			m.nameInput += msg.String()
+		if msg.Text != "" {
+			m.nameInput += msg.Text
 		}
 	}
 	return nil
 }
 
-func (m *model) typeKey(msg tea.KeyMsg) tea.Cmd {
+func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
 		m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
@@ -323,22 +346,31 @@ func (m *model) typeKey(msg tea.KeyMsg) tea.Cmd {
 			m.textBuf = m.textBuf[:len(m.textBuf)-1]
 		}
 	default:
-		if len(msg.String()) == 1 {
-			m.textBuf += msg.String()
+		if msg.Text != "" {
+			m.textBuf += msg.Text
 		}
 	}
 	return nil
 }
 
-func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
+func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case bkey.Matches(msg, keyUndo):
+		m.doUndo()
+		return nil
+	case bkey.Matches(msg, keyRedo):
+		m.doRedo()
+		return nil
+	case bkey.Matches(msg, keyZoomIn):
+		m.vp.setZoom(2)
+		return nil
+	case bkey.Matches(msg, keyZoomOut):
+		m.vp.setZoom(1)
+		return nil
+	}
 	switch msg.String() {
 	case "b", "l", "a", "t", "d", "m", "x":
-		m.tool = toolFor(msg.String())
-		m.grabID = ""
-		m.mouse = false
-		m.anchored = false
-		m.anchor = [2]int{}
-		m.pending = nil
+		m.switchTool(toolFor(msg.String()))
 	case "up":
 		m.moveCursor(0, -1)
 	case "down":
@@ -347,7 +379,7 @@ func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
 		m.moveCursor(-1, 0)
 	case "right":
 		m.moveCursor(1, 0)
-	case " ", "enter":
+	case "space", "enter":
 		m.keyCommit(msg.String() == "enter")
 	case "s":
 		m.startSend()
@@ -358,6 +390,124 @@ func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit
 	}
 	return nil
+}
+
+func (m *model) onCanvas(x, y int) bool {
+	_, ok := m.vp.canvasPoint(x, y, m.width, m.height)
+	return ok
+}
+
+func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
+	ev := msg.Mouse()
+	switch msg.(type) {
+	case tea.MouseWheelMsg:
+		if !m.onCanvas(ev.X, ev.Y) {
+			return nil
+		}
+		if ev.Mod.Contains(tea.ModCtrl) {
+			if ev.Button == tea.MouseWheelUp {
+				m.vp.setZoom(2)
+			} else if ev.Button == tea.MouseWheelDown {
+				m.vp.setZoom(1)
+			}
+			return nil
+		}
+		dx, dy := 0, 0
+		switch ev.Button {
+		case tea.MouseWheelUp:
+			dy = -1
+		case tea.MouseWheelDown:
+			dy = 1
+		case tea.MouseWheelLeft:
+			dx = -1
+		case tea.MouseWheelRight:
+			dx = 1
+		}
+		if ev.Mod.Contains(tea.ModShift) {
+			if dx == 0 {
+				dx, dy = dy, 0
+			}
+		}
+		m.vp.pan(dx, dy)
+		return nil
+	case tea.MouseClickMsg:
+		if ev.Button == tea.MouseMiddle && m.onCanvas(ev.X, ev.Y) {
+			m.panning = true
+			m.panStart = [2]int{ev.X, ev.Y}
+			m.panOrigin = m.vp.origin
+			return nil
+		}
+		if ev.Button == tea.MouseLeft && (ev.Y == 0 || ev.Y == m.height-1) {
+			return m.chromeClick(ev.X, ev.Y)
+		}
+		if m.typing && ev.Button == tea.MouseLeft && ev.Y == m.height-1 {
+			return m.chromeClick(ev.X, ev.Y)
+		}
+		if m.typing {
+			return nil
+		}
+		m.status = ""
+		return m.mouseMsg(msg)
+	case tea.MouseMotionMsg:
+		if m.panning && ev.Button == tea.MouseMiddle {
+			z := m.vp.zoom
+			if z < 1 {
+				z = 1
+			}
+			m.vp.origin[0] = max(0, m.panOrigin[0]-(ev.X-m.panStart[0])/z)
+			m.vp.origin[1] = max(0, m.panOrigin[1]-(ev.Y-m.panStart[1])/z)
+			return nil
+		}
+		if m.typing {
+			return nil
+		}
+		return m.mouseMsg(msg)
+	case tea.MouseReleaseMsg:
+		if ev.Button == tea.MouseMiddle {
+			m.panning = false
+			return nil
+		}
+		if m.typing {
+			return nil
+		}
+		return m.mouseMsg(msg)
+	}
+	return nil
+}
+
+func (m *model) chromeClick(x, y int) tea.Cmd {
+	ch := layoutChrome(m.width, m.d.Name, m.vp.zoom, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
+	hit, ok := ch.hit(x, y, m.width, m.height)
+	if !ok || !hit.enabled {
+		return nil
+	}
+	switch hit.kind {
+	case chipTool:
+		m.switchTool(hit.tool)
+	case chipUndo:
+		m.doUndo()
+	case chipRedo:
+		m.doRedo()
+	case chipSend:
+		m.startSend()
+	case chipZoom:
+		m.vp.fit(m.d.Elements, m.width, m.canvasHeight())
+	}
+	return nil
+}
+
+func (m *model) switchTool(t tool) {
+	if m.typing {
+		m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
+		m.typing = false
+		m.textBuf = ""
+	}
+	m.tool = t
+	m.grabID = ""
+	m.mouse = false
+	m.anchored = false
+	m.anchor = [2]int{}
+	m.pending = nil
 }
 
 func (m *model) moveCursor(dx, dy int) {
@@ -406,16 +556,17 @@ func (m *model) keyCommit(enter bool) {
 }
 
 func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
-	p, ok := m.canvasPoint(msg.X, msg.Y)
+	ev := msg.Mouse()
+	p, ok := m.canvasPoint(ev.X, ev.Y)
 	if !ok {
 		return nil
 	}
 	m.cursor = p
-	if msg.Button != tea.MouseButtonLeft {
+	if ev.Button != tea.MouseLeft {
 		return nil
 	}
-	switch msg.Action {
-	case tea.MouseActionPress:
+	switch msg.(type) {
+	case tea.MouseClickMsg:
 		m.mouse = true
 		m.anchor = m.cursor
 		switch m.tool {
@@ -433,11 +584,11 @@ func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
 			m.typing = true
 			m.mouse = false // the release arrives while typing and is dropped
 		}
-	case tea.MouseActionMotion:
+	case tea.MouseMotionMsg:
 		if m.tool == toolDraw && m.mouse {
 			m.addDrawCell(m.cursor)
 		}
-	case tea.MouseActionRelease:
+	case tea.MouseReleaseMsg:
 		if !m.mouse {
 			return nil
 		}
@@ -486,44 +637,73 @@ func (m model) canvasHeight() int {
 
 // canvasPoint translates a terminal mouse position into a grid coordinate.
 // The canvas starts below the header row. The canvas shows the block of cells
-// whose top-left cell is m.origin. canvasPoint returns false for a position
-// outside the canvas.
+// whose top-left cell is the viewport origin. canvasPoint returns false for a
+// position outside the canvas.
 func (m model) canvasPoint(x, y int) ([2]int, bool) {
-	row := y - headerRows
-	if row < 0 || row >= m.canvasHeight() || x < 0 || x >= m.width {
-		return [2]int{}, false
-	}
-	return [2]int{m.origin[0] + x, m.origin[1] + row}, true
+	return m.vp.canvasPoint(x, y, m.width, m.height)
 }
 
 // ensureVisible moves the viewport to keep the cursor inside the viewport.
 func (m *model) ensureVisible() {
-	h := m.canvasHeight()
-	if m.cursor[0] < m.origin[0] {
-		m.origin[0] = m.cursor[0]
-	}
-	if m.cursor[0] >= m.origin[0]+m.width {
-		m.origin[0] = m.cursor[0] - m.width + 1
-	}
-	if m.cursor[1] < m.origin[1] {
-		m.origin[1] = m.cursor[1]
-	}
-	if m.cursor[1] >= m.origin[1]+h {
-		m.origin[1] = m.cursor[1] - h + 1
-	}
-	m.origin[0] = max(0, m.origin[0])
-	m.origin[1] = max(0, m.origin[1])
+	m.vp.ensureVisible(m.cursor, m.width, m.height)
 }
 
-// apply reloads the diagram if another process changed the file. apply then
-// sends the command to the gate and saves the diagram.
 func (m *model) apply(cmd canvas.Command) {
 	m.reloadIfChanged()
+	before := cloneDiagram(m.d)
 	if err := m.d.Apply(cmd); err != nil {
 		m.status = err.Error()
 		return
 	}
+	m.hist.push(before)
 	m.save()
+}
+
+func (m *model) restore(d *canvas.Diagram) {
+	m.d = d
+	m.save()
+}
+
+func (m *model) doUndo() {
+	if m.discardInFlight() {
+		return
+	}
+	got, ok := m.hist.undo(m.d)
+	if !ok {
+		return
+	}
+	m.restore(got)
+}
+
+func (m *model) doRedo() {
+	if m.discardInFlight() {
+		return
+	}
+	got, ok := m.hist.redo(m.d)
+	if !ok {
+		return
+	}
+	m.restore(got)
+}
+
+func (m *model) discardInFlight() bool {
+	if m.typing {
+		if m.textBuf != "" {
+			m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
+		}
+		m.typing = false
+		m.textBuf = ""
+		return true
+	}
+	if m.mouse || m.anchored || len(m.pending) > 0 || m.grabID != "" {
+		m.mouse = false
+		m.anchored = false
+		m.anchor = [2]int{}
+		m.pending = nil
+		m.grabID = ""
+		return true
+	}
+	return false
 }
 
 // reloadIfChanged replaces the in-memory diagram when the stored file changed
@@ -552,6 +732,7 @@ func (m *model) reloadIfChanged() {
 		}
 		return
 	}
+	m.hist.push(m.d)
 	m.d = d
 	m.mtime = mt
 	m.status = fmt.Sprintf("%s changed on disk; reloaded", d.Name)
@@ -597,33 +778,55 @@ func (m model) snap(p [2]int) [2]int {
 	return p
 }
 
-func (m model) View() string {
+func (m model) View() tea.View {
+	var body string
 	switch m.phase {
 	case phasePick:
-		var b strings.Builder
-		b.WriteString("herdr-canvas — pick a diagram\n\n")
-		for i, n := range m.names {
-			if i == m.sel {
-				b.WriteString("> ")
-			} else {
-				b.WriteString("  ")
-			}
-			b.WriteString(n)
-			b.WriteString("\n")
-		}
-		b.WriteString("\n↑/↓ choose · enter open · n new · esc back · q quit\n")
-		if m.status != "" {
-			b.WriteString(m.status)
-			b.WriteString("\n")
-		}
-		return b.String()
+		body = m.pickView()
 	case phaseName:
-		return fmt.Sprintf("name: %s\n\nenter create · esc back\n%s\n", m.nameInput, m.status)
+		body = fmt.Sprintf("name: %s\n\nenter create · esc back\n%s\n", m.nameInput, m.status)
 	case phaseAgent:
-		return m.agentView()
+		body = m.agentView()
 	default:
-		return m.editView()
+		body = m.editView()
 	}
+	v := tea.NewView(body)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+func (m model) pickView() string {
+	var b strings.Builder
+	b.WriteString("herdr-canvas — pick a diagram\n\n")
+	for i, n := range m.names {
+		if i == m.sel {
+			b.WriteString("> ")
+		} else {
+			b.WriteString("  ")
+		}
+		b.WriteString(n)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n↑/↓ choose · enter open · n new · esc back · q quit\n")
+	if m.status != "" {
+		b.WriteString(m.status)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func (m *model) badge() string {
+	if m.typing {
+		return ""
+	}
+	if m.grabID != "" {
+		return fmt.Sprintf("moving %s %+d%+d", m.grabID, m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1])
+	}
+	if m.mouse || m.anchored {
+		return fmt.Sprintf("%dx%d", abs(m.cursor[0]-m.anchor[0])+1, abs(m.cursor[1]-m.anchor[1])+1)
+	}
+	return ""
 }
 
 func (m model) editView() string {
@@ -631,13 +834,42 @@ func (m model) editView() string {
 	if m.mouse || m.anchored || m.typing || len(m.pending) > 0 {
 		g = m.overlayPreview(g)
 	}
+	ch := layoutChrome(m.width, m.d.Name, m.vp.zoom, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
 	var b strings.Builder
-	b.WriteString(m.d.Name)
+	b.WriteString(ch.header)
 	b.WriteString("\n")
-	b.WriteString(g.Window(m.origin[0], m.origin[1], m.width, m.canvasHeight()))
+	b.WriteString(m.vp.paint(g, m.width, m.canvasHeight()))
 	b.WriteString("\n")
-	b.WriteString(m.statusLine())
+	b.WriteString(styleChromeFooter(ch, m.tool, m.hist.canUndo(), m.hist.canRedo()))
 	return b.String()
+}
+
+func styleChromeFooter(ch chrome, active tool, canUndo, canRedo bool) string {
+	runes := []rune(ch.footer)
+	var out strings.Builder
+	pos := 0
+	for _, c := range ch.chips {
+		if c.row != 1 {
+			continue
+		}
+		if c.x0 > pos {
+			out.WriteString(string(runes[pos:c.x0]))
+		}
+		seg := string(runes[c.x0:c.x1])
+		style := lipgloss.NewStyle()
+		switch {
+		case c.kind == chipTool && c.tool == active:
+			style = style.Reverse(true)
+		case (c.kind == chipUndo && !canUndo) || (c.kind == chipRedo && !canRedo):
+			style = style.Faint(true)
+		}
+		out.WriteString(style.Render(seg))
+		pos = c.x1
+	}
+	if pos < len(runes) {
+		out.WriteString(string(runes[pos:]))
+	}
+	return out.String()
 }
 
 // movePreview replaces the grabbed element with a copy at the dragged offset,
@@ -816,7 +1048,7 @@ func (m *model) sendTo(a herdr.Agent) {
 	m.status = fmt.Sprintf("added %s to %s — add your words and press enter", m.d.Name, agentTab(a))
 }
 
-func (m *model) agentKey(msg tea.KeyMsg) tea.Cmd {
+func (m *model) agentKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "up", "k":
 		if m.agentSel > 0 {
