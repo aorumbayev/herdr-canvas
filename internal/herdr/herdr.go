@@ -224,8 +224,20 @@ func (c *Client) workspaceLabels() (map[string]string, error) {
 	return m, nil
 }
 
-// Prompt submits text to an agent pane.
-func (c *Client) Prompt(paneID, text string) error {
-	_, err := c.run("agent", "prompt", paneID, text)
+// SendText writes text into the input of an agent pane. SendText does not
+// submit it: the person adds their own words and presses enter.
+//
+// The payload carries the bracketed-paste markers. Without them the terminal
+// reads each newline of a diagram as a separate enter, which submits the
+// message one line at a time.
+func (c *Client) SendText(paneID, text string) error {
+	_, err := c.run("pane", "send-text", paneID, "\x1b[200~"+text+"\x1b[201~")
+	return err
+}
+
+// Focus moves the terminal focus to an agent pane, so the person can read the
+// message and add to it.
+func (c *Client) Focus(paneID string) error {
+	_, err := c.run("agent", "focus", paneID)
 	return err
 }

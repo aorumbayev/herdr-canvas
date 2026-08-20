@@ -419,16 +419,22 @@ type fakeSender struct {
 	listErr  error
 	sentTo   string
 	sentText string
+	focused  string
 	sendErr  error
 }
 
 func (f *fakeSender) Agents(string) ([]herdr.Agent, error) { return f.agents, f.listErr }
 
-func (f *fakeSender) Prompt(paneID, text string) error {
+func (f *fakeSender) SendText(paneID, text string) error {
 	if f.sendErr != nil {
 		return f.sendErr
 	}
 	f.sentTo, f.sentText = paneID, text
+	return nil
+}
+
+func (f *fakeSender) Focus(paneID string) error {
+	f.focused = paneID
 	return nil
 }
 
@@ -459,8 +465,8 @@ func TestSendGoesStraightToASingleAgent(t *testing.T) {
 	if !strings.Contains(f.sentText, "herdr-canvas --name \"demo\" export") {
 		t.Errorf("the prompt does not say how to read the diagram back:\n%s", f.sentText)
 	}
-	if !strings.Contains(m.status, "sent demo") {
-		t.Errorf("status = %q, want a sent report", m.status)
+	if !strings.Contains(m.status, "added demo") {
+		t.Errorf("status = %q, want an added report", m.status)
 	}
 }
 
@@ -539,5 +545,22 @@ func TestAgentPickerNamesTheTabAndWorkspace(t *testing.T) {
 	}
 	if os.Getenv("SHOW_PICKER") != "" {
 		t.Log("\n" + view)
+	}
+}
+
+func TestSendWritesTheInputWithoutSubmitting(t *testing.T) {
+	m, f := editorWithAgents(t, herdr.Agent{PaneID: "w1:p9", Agent: "claude", TabLabel: "ship"})
+	m = send(t, m, key("s"))
+
+	// The person adds their own words and presses enter. The canvas must not
+	// submit, so the payload carries no trailing newline of its own.
+	if strings.HasSuffix(f.sentText, "\n\n") {
+		t.Errorf("the payload ends in a blank line, which can submit:\n%q", f.sentText[len(f.sentText)-20:])
+	}
+	if f.focused != "w1:p9" {
+		t.Errorf("focused %q, want the agent pane so the person can type", f.focused)
+	}
+	if !strings.Contains(m.status, "press enter") {
+		t.Errorf("status = %q, want it to say the person submits", m.status)
 	}
 }

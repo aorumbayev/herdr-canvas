@@ -92,9 +92,10 @@ canvas has no save key.
 
 ## Send the diagram to the agent beside you
 
-Press `s`. The canvas sends the agent the diagram as text, the list of its
-elements, and the commands that change it. The agent can answer about the
-picture and edit it without any more context from you.
+Press `s`. The canvas writes the diagram into the agent's input: the picture as
+text, the list of its elements, and the commands that change it. It does not
+press enter. herdr focuses the agent pane, you add what you want done, and you
+submit it. Nothing reaches the agent until you do.
 
 One agent in the workspace receives the diagram at once. When the workspace
 holds more than one agent, the canvas lists them and you choose:

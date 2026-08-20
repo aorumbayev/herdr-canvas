@@ -65,7 +65,8 @@ const (
 // not the herdr client, so a test can drive the send without a herdr server.
 type sender interface {
 	Agents(workspace string) ([]herdr.Agent, error)
-	Prompt(paneID, text string) error
+	SendText(paneID, text string) error
+	Focus(paneID string) error
 }
 
 type model struct {
@@ -741,12 +742,17 @@ func (m *model) startSend() {
 	m.phase = phaseAgent
 }
 
+// sendTo writes the diagram into an agent's input and focuses that agent. It
+// does not submit the message. The person adds their own words and presses
+// enter.
 func (m *model) sendTo(a herdr.Agent) {
-	if err := m.send.Prompt(a.PaneID, canvas.Prompt(m.d)); err != nil {
+	if err := m.send.SendText(a.PaneID, canvas.Prompt(m.d)); err != nil {
 		m.status = err.Error()
 		return
 	}
-	m.status = fmt.Sprintf("sent %s to %s (%s)", m.d.Name, a.Agent, a.PaneID)
+	// A failed focus does not undo a message that already landed.
+	_ = m.send.Focus(a.PaneID)
+	m.status = fmt.Sprintf("added %s to %s — add your words and press enter", m.d.Name, agentTab(a))
 }
 
 func (m *model) agentKey(msg tea.KeyMsg) tea.Cmd {
