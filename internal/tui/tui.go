@@ -214,10 +214,38 @@ func (m *model) pickKey(msg tea.KeyMsg) tea.Cmd {
 	case "n":
 		m.phase = phaseName
 		m.nameInput = ""
+	case "esc":
+		// Only a diagram that exists can be gone back to. The picker is the
+		// first screen when the canvas opens outside a git repository.
+		if m.d != nil && m.d.Name != "" {
+			m.phase = phaseEdit
+			m.status = ""
+		}
 	case "q", "ctrl+c":
 		return tea.Quit
 	}
 	return nil
+}
+
+// toPicker leaves the editor for the diagram list. It reads the store again,
+// because another diagram can appear or go while the editor is open. It puts
+// the cursor on the diagram the editor was showing.
+func (m *model) toPicker() {
+	names, err := m.s.List()
+	if err != nil {
+		m.status = err.Error()
+		return
+	}
+	m.names = names
+	m.sel = 0
+	for i, n := range names {
+		if n == m.d.Name {
+			m.sel = i
+			break
+		}
+	}
+	m.status = ""
+	m.phase = phasePick
 }
 
 func (m *model) nameKey(msg tea.KeyMsg) tea.Cmd {
@@ -297,6 +325,8 @@ func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
 		m.keyCommit(msg.String() == "enter")
 	case "s":
 		m.startSend()
+	case "esc":
+		m.toPicker()
 	case "q", "ctrl+c":
 		m.save()
 		return tea.Quit
@@ -550,7 +580,7 @@ func (m model) View() string {
 			b.WriteString(n)
 			b.WriteString("\n")
 		}
-		b.WriteString("\n↑/↓ choose · enter open · n new · q quit\n")
+		b.WriteString("\n↑/↓ choose · enter open · n new · esc back · q quit\n")
 		if m.status != "" {
 			b.WriteString(m.status)
 			b.WriteString("\n")
@@ -672,7 +702,7 @@ func (m model) statusLine() string {
 	if m.anchored {
 		extra += fmt.Sprintf(" · anchor (%d,%d)", m.anchor[0], m.anchor[1])
 	}
-	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/a/t/d/m/x tool · drag mouse · arrows+space · s send · q quit",
+	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/a/t/d/m/x · drag · s send · esc picker · q quit",
 		toolNames[m.tool], m.cursor[0], m.cursor[1], extra)
 }
 

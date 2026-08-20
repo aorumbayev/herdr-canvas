@@ -564,3 +564,54 @@ func TestSendWritesTheInputWithoutSubmitting(t *testing.T) {
 		t.Errorf("status = %q, want it to say the person submits", m.status)
 	}
 }
+
+func TestEscapeReturnsToThePickerWithAFreshList(t *testing.T) {
+	m := editor(t)
+	// A second diagram appears while the editor is open. The old picker list
+	// was built before it existed.
+	if err := m.s.Save(&canvas.Diagram{Name: "later"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	m.names = []string{"demo"}
+
+	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.phase != phasePick {
+		t.Fatalf("phase = %v, want the picker", m.phase)
+	}
+	if strings.Join(m.names, ",") != "demo,later" {
+		t.Errorf("names = %v, want the store read again", m.names)
+	}
+	if m.names[m.sel] != "demo" {
+		t.Errorf("cursor on %q, want the diagram the editor was showing", m.names[m.sel])
+	}
+
+	// Opening the other diagram from the picker switches the editor to it.
+	m = send(t, m, key("j"), key("enter"))
+	if m.phase != phaseEdit || m.d.Name != "later" {
+		t.Errorf("phase = %v, diagram = %q, want the editor on later", m.phase, m.d.Name)
+	}
+}
+
+func TestPickerEscapeGoesBackToTheOpenDiagram(t *testing.T) {
+	m := editor(t)
+	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.phase != phasePick {
+		t.Fatalf("phase = %v, want the picker", m.phase)
+	}
+	m = send(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.phase != phaseEdit {
+		t.Errorf("phase = %v, want the editor again", m.phase)
+	}
+}
+
+func TestEscapeWhileTypingDoesNotLeaveTheEditor(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, left(3, 2, tea.MouseActionPress), key("h"), tea.KeyMsg{Type: tea.KeyEsc})
+	if m.phase != phaseEdit {
+		t.Errorf("phase = %v, want the editor — escape cancels the text entry", m.phase)
+	}
+	if m.typing {
+		t.Error("still typing after escape")
+	}
+}

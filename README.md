@@ -79,7 +79,12 @@ Pick a tool with one key, then drag with the left mouse button:
 | `m` | Move             |
 | `x` | Delete           |
 | `s` | Send to agent    |
+| `esc` | Diagram picker |
 | `q` | Quit             |
+
+Press `esc` to leave the drawing for the list of your diagrams, and `esc` again
+to go back to it. The list reads the store each time, so a diagram your agent
+made while you drew is in it.
 
 A line and an arrow run on one axis, then on the other axis. The bend gets a
 corner glyph. An arrow gets one arrowhead at its end. Boxes and lines use one
