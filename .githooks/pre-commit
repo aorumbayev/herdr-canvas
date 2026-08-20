@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -e
+cd "$(git rev-parse --show-toplevel)"
+unformatted=$(gofmt -l .)
+if [ -n "$unformatted" ]; then
+	echo "gofmt reports these files:"
+	echo "$unformatted"
+	exit 1
+fi
+go vet ./...
