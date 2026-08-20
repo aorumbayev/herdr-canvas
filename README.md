@@ -62,9 +62,10 @@ no binaries. The install runs `go build`, so the Go toolchain must be on your
 ## Draw your first diagram
 
 Press `prefix+d`. herdr opens the canvas in a split beside the active pane.
-When you are inside a git repository, the canvas opens the diagram named for
-that repository and branch, for example `herdr-canvas@main`. When you are not,
-a picker lists your diagrams and offers to create one.
+Press `prefix+d` again to close it. When you are inside a git repository, the
+canvas opens the diagram named for that repository and branch, for example
+`herdr-canvas@main`. When you are not, a picker lists your diagrams and offers
+to create one.
 
 Pick a tool with one key, then drag with the left mouse button:
 
@@ -77,7 +78,7 @@ Pick a tool with one key, then drag with the left mouse button:
 | `d` | Draw (freeform)  |
 | `m` | Move             |
 | `x` | Delete           |
-| `s` | Save             |
+| `s` | Send to agent    |
 | `q` | Quit             |
 
 A line and an arrow run on one axis, then on the other axis. The bend gets a
@@ -86,7 +87,29 @@ Unicode box-drawing set (`┌ ─ ┐ │ └ ┘ ┼ ►`), so an edge and a ju
 without a change of style.
 
 The arrow keys move a cursor, and space or enter anchors and commits, so you
-can draw the same shapes without a mouse. Every change saves at once.
+can draw the same shapes without a mouse. Every change saves at once, so the
+canvas has no save key.
+
+## Send the diagram to the agent beside you
+
+Press `s`. The canvas sends the agent the diagram as text, the list of its
+elements, and the commands that change it. The agent can answer about the
+picture and edit it without any more context from you.
+
+One agent in the workspace receives the diagram at once. When the workspace
+holds more than one agent, the canvas lists them and you choose:
+
+```
+send herdr-canvas@main to which agent?
+
+> claude    w4M:p3   idle
+  opencode  w4M:pV   working
+
+↑/↓ choose · enter send · esc cancel
+```
+
+You keep drawing while the agent works. The canvas reloads the file when the
+agent changes it, so you both look at the same diagram.
 
 ## Let your agent edit the diagram
 

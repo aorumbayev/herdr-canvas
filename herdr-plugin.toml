@@ -9,14 +9,14 @@ platforms = ["linux", "macos"]
 command = ["go", "build", "-o", "bin/herdr-canvas", "./cmd/herdr-canvas"]
 
 # This step installs the prefix+d hotkey. The hotkey opens the canvas in a split
-# beside the active pane, in the cwd of that pane. herdr uses prefix+c for a new tab. This
+# beside the active pane, in the cwd of that pane. A second press closes it. herdr uses prefix+c for a new tab. This
 # plugin uses prefix+d.
 [[build]]
 command = ["bin/herdr-canvas", "setup"]
 
 [[actions]]
 id = "open"
-title = "Open herdr-canvas diagram"
+title = "Toggle herdr-canvas diagram"
 contexts = ["workspace", "pane"]
 command = ["bin/herdr-canvas", "launch"]
 
@@ -24,4 +24,6 @@ command = ["bin/herdr-canvas", "launch"]
 id = "canvas"
 title = "herdr-canvas"
 placement = "split"
-command = ["./bin/herdr-canvas"]
+# The pane runs with --cwd set to the invoking repository, so a relative path
+# does not resolve. HERDR_PLUGIN_ROOT is the only stable way to name the binary.
+command = ["sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/bin/herdr-canvas\""]

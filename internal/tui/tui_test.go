@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"herdr-canvas/internal/canvas"
+	"herdr-canvas/internal/herdr"
 	"herdr-canvas/internal/store"
 )
 
@@ -409,5 +410,108 @@ func TestArrowToolKeyIsSeparateFromLine(t *testing.T) {
 	m = send(t, m, key("l"))
 	if m.tool != toolLine {
 		t.Errorf("tool = %v, want the line tool", m.tool)
+	}
+}
+
+type fakeSender struct {
+	agents   []herdr.Agent
+	listErr  error
+	sentTo   string
+	sentText string
+	sendErr  error
+}
+
+func (f *fakeSender) Agents(string) ([]herdr.Agent, error) { return f.agents, f.listErr }
+
+func (f *fakeSender) Prompt(paneID, text string) error {
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.sentTo, f.sentText = paneID, text
+	return nil
+}
+
+func editorWithAgents(t *testing.T, agents ...herdr.Agent) (model, *fakeSender) {
+	t.Helper()
+	m := editor(t)
+	f := &fakeSender{agents: agents}
+	m.send = f
+	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 4, Y2: 2, Label: "hi"}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	return m, f
+}
+
+func TestSendGoesStraightToASingleAgent(t *testing.T) {
+	m, f := editorWithAgents(t, herdr.Agent{PaneID: "w1:p9", Agent: "claude", Status: "idle"})
+	m = send(t, m, key("s"))
+
+	if m.phase != phaseEdit {
+		t.Errorf("phase = %v, want the editor — one agent needs no picker", m.phase)
+	}
+	if f.sentTo != "w1:p9" {
+		t.Errorf("sent to %q, want w1:p9", f.sentTo)
+	}
+	if !strings.Contains(f.sentText, "┌───┐") {
+		t.Errorf("the prompt carries no diagram:\n%s", f.sentText)
+	}
+	if !strings.Contains(f.sentText, "herdr-canvas --name \"demo\" export") {
+		t.Errorf("the prompt does not say how to read the diagram back:\n%s", f.sentText)
+	}
+	if !strings.Contains(m.status, "sent demo") {
+		t.Errorf("status = %q, want a sent report", m.status)
+	}
+}
+
+func TestSendOpensAPickerForSeveralAgents(t *testing.T) {
+	m, f := editorWithAgents(t,
+		herdr.Agent{PaneID: "w1:p1", Agent: "claude", Status: "idle"},
+		herdr.Agent{PaneID: "w1:p2", Agent: "opencode", Status: "working"},
+	)
+	m = send(t, m, key("s"))
+	if m.phase != phaseAgent {
+		t.Fatalf("phase = %v, want the agent picker", m.phase)
+	}
+	if f.sentTo != "" {
+		t.Errorf("sent to %q before a choice was made", f.sentTo)
+	}
+	view := m.View()
+	for _, want := range []string{"w1:p1", "w1:p2", "claude", "opencode"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("picker does not list %q:\n%s", want, view)
+		}
+	}
+
+	m = send(t, m, key("j"), key("enter"))
+	if f.sentTo != "w1:p2" {
+		t.Errorf("sent to %q, want the chosen agent w1:p2", f.sentTo)
+	}
+	if m.phase != phaseEdit {
+		t.Errorf("phase = %v, want the editor after the send", m.phase)
+	}
+}
+
+func TestSendPickerEscapeSendsNothing(t *testing.T) {
+	m, f := editorWithAgents(t,
+		herdr.Agent{PaneID: "w1:p1", Agent: "claude"},
+		herdr.Agent{PaneID: "w1:p2", Agent: "claude"},
+	)
+	m = send(t, m, key("s"), tea.KeyMsg{Type: tea.KeyEsc})
+	if f.sentTo != "" {
+		t.Errorf("escape still sent to %q", f.sentTo)
+	}
+	if m.phase != phaseEdit {
+		t.Errorf("phase = %v, want the editor", m.phase)
+	}
+}
+
+func TestSendReportsWhenTheWorkspaceHasNoAgent(t *testing.T) {
+	m, f := editorWithAgents(t)
+	m = send(t, m, key("s"))
+	if f.sentTo != "" {
+		t.Errorf("sent to %q with no agent present", f.sentTo)
+	}
+	if !strings.Contains(m.status, "no agent") {
+		t.Errorf("status = %q, want a no-agent report", m.status)
 	}
 }

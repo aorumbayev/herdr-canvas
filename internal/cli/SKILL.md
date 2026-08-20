@@ -97,6 +97,14 @@ trailing whitespace trimmed, e.g.:
 └──┘
 ```
 
+## The canvas can send you the diagram
+
+A person drawing in the canvas presses `s`. herdr then submits a prompt to your
+pane holding the diagram as text, the list of its elements, and this command
+set. Treat that prompt as the current state of the diagram. Read the diagram
+again with `export` after every change you make, because the person keeps
+drawing while you work.
+
 ## Installation side effect
 
 `herdr-canvas setup` runs as a `[[build]]` step of the herdr plugin. It appends

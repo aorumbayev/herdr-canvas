@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"herdr-canvas/internal/canvas"
+	"herdr-canvas/internal/herdr"
 	"herdr-canvas/internal/name"
 	"herdr-canvas/internal/store"
 )
@@ -19,6 +20,7 @@ const (
 	phasePick phase = iota
 	phaseName
 	phaseEdit
+	phaseAgent
 )
 
 type tool int
@@ -59,6 +61,13 @@ const (
 	ghostGlyph  = "·"
 )
 
+// sender delivers a diagram to an agent pane. The editor holds the interface,
+// not the herdr client, so a test can drive the send without a herdr server.
+type sender interface {
+	Agents(workspace string) ([]herdr.Agent, error)
+	Prompt(paneID, text string) error
+}
+
 type model struct {
 	s     *store.Store
 	d     *canvas.Diagram
@@ -84,13 +93,19 @@ type model struct {
 	textPos  [2]int
 	textBuf  string
 	status   string
+
+	send      sender
+	workspace string
+	agents    []herdr.Agent
+	agentSel  int
 }
 
 // Run starts the TUI. Run opens the editor for the composite diagram in cwd.
 // If cwd is not a git repository, Run opens the picker.
 func Run(cwd string) error {
 	s := store.New()
-	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox, width: defaultW, height: defaultH}
+	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox, width: defaultW, height: defaultH,
+		send: herdr.New(), workspace: herdr.Workspace()}
 
 	nm, err := name.Composite(cwd)
 	if err != nil {
@@ -153,6 +168,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		case phaseName:
 			cmd := m.nameKey(msg)
+			return m, cmd
+		case phaseAgent:
+			cmd := m.agentKey(msg)
 			return m, cmd
 		case phaseEdit:
 			if m.typing {
@@ -277,7 +295,7 @@ func (m *model) editKey(msg tea.KeyMsg) tea.Cmd {
 	case " ", "enter":
 		m.keyCommit(msg.String() == "enter")
 	case "s":
-		m.save()
+		m.startSend()
 	case "q", "ctrl+c":
 		m.save()
 		return tea.Quit
@@ -539,6 +557,8 @@ func (m model) View() string {
 		return b.String()
 	case phaseName:
 		return fmt.Sprintf("name: %s\n\nenter create · esc back\n%s\n", m.nameInput, m.status)
+	case phaseAgent:
+		return m.agentView()
 	default:
 		return m.editView()
 	}
@@ -651,7 +671,7 @@ func (m model) statusLine() string {
 	if m.anchored {
 		extra += fmt.Sprintf(" · anchor (%d,%d)", m.anchor[0], m.anchor[1])
 	}
-	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/a/t/d/m/x tool · drag mouse · arrows+space · s save · q quit",
+	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/a/t/d/m/x tool · drag mouse · arrows+space · s send · q quit",
 		toolNames[m.tool], m.cursor[0], m.cursor[1], extra)
 }
 
@@ -694,4 +714,73 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+// startSend picks the agent that receives the diagram. One agent in the
+// workspace receives it at once. More than one opens the picker.
+func (m *model) startSend() {
+	if m.send == nil {
+		m.status = "no herdr client; send needs a herdr pane"
+		return
+	}
+	agents, err := m.send.Agents(m.workspace)
+	if err != nil {
+		m.status = err.Error()
+		return
+	}
+	if len(agents) == 0 {
+		m.status = "no agent in this workspace"
+		return
+	}
+	if len(agents) == 1 {
+		m.sendTo(agents[0])
+		return
+	}
+	m.agents = agents
+	m.agentSel = 0
+	m.phase = phaseAgent
+}
+
+func (m *model) sendTo(a herdr.Agent) {
+	if err := m.send.Prompt(a.PaneID, canvas.Prompt(m.d)); err != nil {
+		m.status = err.Error()
+		return
+	}
+	m.status = fmt.Sprintf("sent %s to %s (%s)", m.d.Name, a.Agent, a.PaneID)
+}
+
+func (m *model) agentKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "up", "k":
+		if m.agentSel > 0 {
+			m.agentSel--
+		}
+	case "down", "j":
+		if m.agentSel < len(m.agents)-1 {
+			m.agentSel++
+		}
+	case "enter":
+		a := m.agents[m.agentSel]
+		m.phase = phaseEdit
+		m.sendTo(a)
+	case "esc", "q":
+		m.phase = phaseEdit
+		m.status = "send cancelled"
+	}
+	return nil
+}
+
+func (m model) agentView() string {
+	var b strings.Builder
+	b.WriteString("send " + m.d.Name + " to which agent?\n\n")
+	for i, a := range m.agents {
+		if i == m.agentSel {
+			b.WriteString("> ")
+		} else {
+			b.WriteString("  ")
+		}
+		fmt.Fprintf(&b, "%-9s %-8s %s\n", a.Agent, a.PaneID, a.Status)
+	}
+	b.WriteString("\n↑/↓ choose · enter send · esc cancel\n")
+	return b.String()
 }
