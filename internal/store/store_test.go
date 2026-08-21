@@ -133,3 +133,22 @@ func TestModTimeMissingDiagramIsZero(t *testing.T) {
 		t.Error("ModTime = zero after Save")
 	}
 }
+
+func TestDeleteRemovesDiagram(t *testing.T) {
+	s := &Store{Base: t.TempDir()}
+	if err := s.Save(&canvas.Diagram{Name: "demo"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := s.Delete("demo"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := s.Load("demo"); !os.IsNotExist(err) {
+		t.Fatalf("Load after Delete: %v, want not exist", err)
+	}
+	if err := s.Delete("demo"); err != nil {
+		t.Fatalf("Delete missing: %v", err)
+	}
+	if err := s.Delete("../evil"); err == nil {
+		t.Fatal("want error for unsafe name")
+	}
+}

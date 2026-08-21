@@ -3,7 +3,7 @@ package tui
 import "testing"
 
 func TestChromeHitArrowSetsTool(t *testing.T) {
-	ch := layoutChrome(80, "demo", 10, [2]int{4, 2}, toolBox, true, true, "")
+	ch := layoutChrome(80, "demo", [2]int{4, 2}, toolBox, true, true, "")
 	idx := indexOf(ch.footer, "arrow")
 	if idx < 0 {
 		t.Fatalf("footer %q has no arrow", ch.footer)
@@ -15,14 +15,14 @@ func TestChromeHitArrowSetsTool(t *testing.T) {
 }
 
 func TestChromePaddingIsAMiss(t *testing.T) {
-	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
+	ch := layoutChrome(80, "demo", [2]int{0, 0}, toolBox, true, true, "")
 	if _, ok := ch.hit(0, 5, 80, 12); ok {
 		t.Fatal("canvas row must miss chrome")
 	}
 }
 
 func TestChromeDimUndoDoesNotHitUndo(t *testing.T) {
-	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, false, false, "")
+	ch := layoutChrome(80, "demo", [2]int{0, 0}, toolBox, false, false, "")
 	idx := indexOf(ch.footer, "undo")
 	if idx < 0 {
 		t.Fatalf("footer %q", ch.footer)
@@ -34,51 +34,65 @@ func TestChromeDimUndoDoesNotHitUndo(t *testing.T) {
 }
 
 func TestChromeNarrowDropsSendThenUndo(t *testing.T) {
-	wide := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
-	if indexOf(wide.footer, "send") < 0 {
+	wide := layoutChrome(80, "demo", [2]int{0, 0}, toolBox, true, true, "")
+	if indexOf(wide.footer, "send") < 0 || indexOf(wide.footer, "help") < 0 {
 		t.Fatalf("wide footer %q", wide.footer)
 	}
-	mid := layoutChrome(36, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
+	if indexOf(wide.footer, "1 sel") < 0 {
+		t.Fatalf("wide footer missing select mapping: %q", wide.footer)
+	}
+	mid := layoutChrome(36, "demo", [2]int{0, 0}, toolBox, true, true, "")
 	if indexOf(mid.footer, "send") >= 0 {
 		t.Errorf("mid footer still has send: %q", mid.footer)
 	}
-	if indexOf(mid.footer, "undo") >= 0 {
-		t.Errorf("mid footer still has undo: %q", mid.footer)
+	if indexOf(mid.footer, "help") >= 0 {
+		t.Errorf("mid footer still has help: %q", mid.footer)
 	}
-	tiny := layoutChrome(20, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
-	if indexOf(tiny.footer, "box") >= 0 && indexOf(tiny.footer, "b ") < 0 && indexOf(tiny.footer, "b l") < 0 {
+	tiny := layoutChrome(20, "demo", [2]int{0, 0}, toolBox, false, false, "")
+	if indexOf(tiny.footer, "2 box") >= 0 && indexOf(tiny.footer, "2") < 0 {
 		t.Errorf("tiny footer was not shortened: %q", tiny.footer)
 	}
 }
 
-func TestChromeZoomHitUsesRuneColumns(t *testing.T) {
-	ch := layoutChrome(30, "日本語", 10, [2]int{4, 2}, toolBox, true, true, "")
-	zx := lastIndexOfRunes(ch.header, "1x")
-	if zx < 0 {
-		t.Fatalf("header %q has no 1x", ch.header)
+func TestChromeHelpChipHits(t *testing.T) {
+	ch := layoutChrome(80, "demo", [2]int{0, 0}, toolBox, true, true, "")
+	idx := lastIndexOfRunes(ch.footer, "help")
+	if idx < 0 {
+		t.Fatalf("footer %q", ch.footer)
 	}
-	var zoom chip
-	for _, c := range ch.chips {
-		if c.kind == chipZoom {
-			zoom = c
-			break
-		}
-	}
-	if zoom.kind != chipZoom {
-		t.Fatal("no zoom chip")
-	}
-	if zoom.x0 != zx {
-		t.Errorf("zoom chip x0=%d, want rune index %d in %q", zoom.x0, zx, ch.header)
-	}
-	hit, ok := ch.hit(zx, 0, 30, 12)
-	if !ok || hit.kind != chipZoom {
-		t.Errorf("hit at rune col %d = %+v ok=%v, want chipZoom", zx, hit, ok)
+	hit, ok := ch.hit(idx, 11, 80, 12)
+	if !ok || hit.kind != chipHelp {
+		t.Errorf("hit = %+v ok=%v, want chipHelp", hit, ok)
 	}
 }
 
-func TestChromeHeaderHasRecenter(t *testing.T) {
-	ch := layoutChrome(80, "demo", 10, [2]int{4, 2}, toolBox, true, true, "")
-	if indexOf(ch.header, "1x") < 0 || indexOf(ch.header, "recenter") < 0 {
+func TestChromeNameHitUsesRuneColumns(t *testing.T) {
+	ch := layoutChrome(30, "日本語", [2]int{4, 2}, toolBox, true, true, "")
+	var name chip
+	for _, c := range ch.chips {
+		if c.kind == chipName {
+			name = c
+			break
+		}
+	}
+	if name.kind != chipName {
+		t.Fatal("no name chip")
+	}
+	if name.x0 != 0 {
+		t.Errorf("name chip x0=%d, want 0 in %q", name.x0, ch.header)
+	}
+	hit, ok := ch.hit(0, 0, 30, 12)
+	if !ok || hit.kind != chipName {
+		t.Errorf("hit at 0 = %+v ok=%v, want chipName", hit, ok)
+	}
+}
+
+func TestChromeHeaderHasRecenterNotZoom(t *testing.T) {
+	ch := layoutChrome(80, "demo", [2]int{4, 2}, toolBox, true, true, "")
+	if indexOf(ch.header, "1x") >= 0 {
+		t.Fatalf("header still has zoom: %q", ch.header)
+	}
+	if indexOf(ch.header, "recenter") < 0 {
 		t.Fatalf("header %q", ch.header)
 	}
 	idx := indexOf(ch.header, "recenter")
@@ -86,29 +100,46 @@ func TestChromeHeaderHasRecenter(t *testing.T) {
 	if !ok || hit.kind != chipRecenter {
 		t.Errorf("hit = %+v ok=%v, want chipRecenter", hit, ok)
 	}
+	idx = indexOf(ch.header, "canvases")
+	if idx < 0 {
+		t.Fatalf("header has no canvases control: %q", ch.header)
+	}
+	hit, ok = ch.hit(idx, 0, 80, 12)
+	if !ok || hit.kind != chipCanvases {
+		t.Errorf("hit = %+v ok=%v, want chipCanvases", hit, ok)
+	}
 }
 
 func TestChromeFooterGroupIsCentered(t *testing.T) {
-	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "")
-	idx := indexOf(ch.footer, "[box]")
+	ch := layoutChrome(80, "demo", [2]int{0, 0}, toolBox, true, true, "")
+	idx := indexOf(ch.footer, "[2 box]")
 	if idx < 1 {
 		t.Fatalf("footer still left-aligned: %q", ch.footer)
 	}
 	hit, ok := ch.hit(idx, 11, 80, 12)
 	if !ok || hit.tool != toolBox {
-		t.Errorf("centered [box] miss: %+v ok=%v", hit, ok)
+		t.Errorf("centered [2 box] miss: %+v ok=%v", hit, ok)
+	}
+}
+
+func TestChromeSelectIsFirst(t *testing.T) {
+	ch := layoutChrome(80, "demo", [2]int{0, 0}, toolSelect, true, true, "")
+	sel := indexOf(ch.footer, "[1 sel]")
+	box := indexOf(ch.footer, "2 box")
+	if sel < 0 || box < 0 || sel > box {
+		t.Fatalf("select should come first: %q", ch.footer)
 	}
 }
 
 func TestChromeBadgeDoesNotDropChipsAtWidth80(t *testing.T) {
-	ch := layoutChrome(80, "demo", 10, [2]int{0, 0}, toolBox, true, true, "13x5")
+	ch := layoutChrome(80, "demo", [2]int{0, 0}, toolBox, true, true, "13x5")
 	if indexOf(ch.footer, "send") < 0 {
 		t.Errorf("footer with badge dropped send: %q", ch.footer)
 	}
 	if indexOf(ch.footer, "arrow") < 0 {
 		t.Errorf("footer with badge dropped arrow: %q", ch.footer)
 	}
-	if indexOf(ch.footer, "[box]") < 0 || indexOf(ch.footer, "line") < 0 {
+	if indexOf(ch.footer, "[2 box]") < 0 || indexOf(ch.footer, "3 line") < 0 {
 		t.Errorf("footer with badge used short labels: %q", ch.footer)
 	}
 }

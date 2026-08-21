@@ -26,35 +26,32 @@ const (
 	phaseName
 	phaseEdit
 	phaseAgent
+	phaseHelp
 )
 
 type tool int
 
 const (
-	toolBox tool = iota
+	toolSelect tool = iota
+	toolBox
 	toolLine
 	toolArrow
 	toolText
 	toolDraw
-	toolMove
-	toolDelete
 )
 
 var (
-	keyUndo    = bkey.NewBinding(bkey.WithKeys("ctrl+z"))
-	keyRedo    = bkey.NewBinding(bkey.WithKeys("ctrl+shift+z", "ctrl+y"))
-	keyZoomIn  = bkey.NewBinding(bkey.WithKeys("+", "="))
-	keyZoomOut = bkey.NewBinding(bkey.WithKeys("-"))
+	keyUndo = bkey.NewBinding(bkey.WithKeys("ctrl+z"))
+	keyRedo = bkey.NewBinding(bkey.WithKeys("ctrl+shift+z", "ctrl+y"))
 )
 
 var toolNames = map[tool]string{
+	toolSelect: "select",
 	toolBox:    "box",
 	toolLine:   "line",
 	toolArrow:  "arrow",
 	toolText:   "text",
 	toolDraw:   "draw",
-	toolMove:   "move",
-	toolDelete: "delete",
 }
 
 // The editor fills the whole terminal. The editor shows one header row, then
@@ -95,6 +92,8 @@ type model struct {
 	width, height int
 	vp            viewport
 	hist          history
+	histories     map[string]history
+	selections    map[string]map[string]bool
 	ch            chrome
 	panning       bool
 	panStart      [2]int
@@ -105,7 +104,10 @@ type model struct {
 	mouse         bool
 	anchored      bool
 	anchor        [2]int
-	grabID        string
+	selected      map[string]bool
+	selAct        selectAct
+	selAdd        bool
+	pickConfirm   string
 	pending       []canvas.Cell
 	typing        bool
 	textPos       [2]int
@@ -130,8 +132,7 @@ type model struct {
 // If cwd is not a git repository, Run opens the picker.
 func Run(cwd string) error {
 	s := store.New()
-	m := model{s: s, d: &canvas.Diagram{}, tool: toolBox, width: defaultW, height: defaultH,
-		vp:   viewport{zoom: 10},
+	m := model{s: s, d: &canvas.Diagram{}, tool: toolSelect, width: defaultW, height: defaultH,
 		send: herdr.New(), workspace: herdr.Workspace()}
 
 	nm, err := name.Composite(cwd)
@@ -174,9 +175,8 @@ func RunNamed(n string) error {
 	}
 	mt, _ := s.ModTime(n)
 	return run(model{
-		s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox,
+		s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolSelect,
 		width: defaultW, height: defaultH,
-		vp: viewport{zoom: 10},
 	})
 }
 
@@ -248,6 +248,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.ensureVisible()
 		return m, nil
+	case tea.PasteMsg:
+		m.acceptPaste(msg.Content)
+		return m, nil
+	case tea.ClipboardMsg:
+		m.acceptPaste(msg.Content)
+		return m, nil
 	case tea.KeyPressMsg:
 		if m.dismissNotice(msg) {
 			return m, nil
@@ -262,6 +268,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		case phaseAgent:
 			cmd := m.agentKey(msg)
+			return m, cmd
+		case phaseHelp:
+			cmd := m.helpKey(msg)
 			return m, cmd
 		case phaseEdit:
 			if m.typing && bkey.Matches(msg, keyUndo) {
@@ -315,6 +324,9 @@ func (m model) noticeLine() string {
 }
 
 func (m *model) pickKey(msg tea.KeyPressMsg) tea.Cmd {
+	if m.pickConfirm != "" {
+		return m.pickConfirmKey(msg)
+	}
 	switch msg.String() {
 	case "up", "k":
 		if m.sel > 0 {
@@ -327,9 +339,7 @@ func (m *model) pickKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		if m.sel < len(m.names) {
 			if d, err := m.s.Load(m.names[m.sel]); err == nil {
-				m.d = d
-				m.mtime, _ = m.s.ModTime(d.Name)
-				m.phase = phaseEdit
+				m.openCanvas(d)
 			} else {
 				m.status = err.Error()
 			}
@@ -337,10 +347,17 @@ func (m *model) pickKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "n":
 		m.phase = phaseName
 		m.nameInput = ""
+	case "delete", "backspace":
+		m.beginPickDelete()
 	case "esc":
 		// Only a diagram that exists can be gone back to. The picker is the
 		// first screen when the canvas opens outside a git repository.
 		if m.d != nil && m.d.Name != "" {
+			if _, err := m.s.Load(m.d.Name); err != nil {
+				m.d = &canvas.Diagram{}
+				m.mtime = time.Time{}
+				return nil
+			}
 			m.phase = phaseEdit
 			m.status = ""
 		}
@@ -348,6 +365,58 @@ func (m *model) pickKey(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Quit
 	}
 	return nil
+}
+
+func (m *model) pickConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "y", "Y", "enter":
+		m.pickDelete(m.pickConfirm)
+		m.pickConfirm = ""
+	case "n", "N", "esc":
+		m.pickConfirm = ""
+		m.status = ""
+	}
+	return nil
+}
+
+func (m *model) beginPickDelete() {
+	if m.sel < 0 || m.sel >= len(m.names) {
+		return
+	}
+	m.pickConfirm = m.names[m.sel]
+	m.status = fmt.Sprintf("delete %q? y/N", m.pickConfirm)
+}
+
+func (m *model) pickDelete(name string) {
+	if err := m.s.Delete(name); err != nil {
+		m.status = err.Error()
+		return
+	}
+	if m.histories != nil {
+		delete(m.histories, name)
+	}
+	if m.selections != nil {
+		delete(m.selections, name)
+	}
+	if m.d != nil && m.d.Name == name {
+		m.d = &canvas.Diagram{}
+		m.mtime = time.Time{}
+		m.hist = history{}
+		m.clearSelection()
+	}
+	names, err := m.s.List()
+	if err != nil {
+		m.status = err.Error()
+		return
+	}
+	m.names = names
+	if m.sel >= len(m.names) && m.sel > 0 {
+		m.sel--
+	}
+	if len(m.names) == 0 {
+		m.sel = 0
+	}
+	m.status = fmt.Sprintf("deleted %s", name)
 }
 
 // toPicker leaves the editor for the diagram list. It reads the store again,
@@ -368,7 +437,59 @@ func (m *model) toPicker() {
 		}
 	}
 	m.status = ""
+	m.pickConfirm = ""
 	m.phase = phasePick
+}
+
+func (m *model) stashCanvasState() {
+	if m.d == nil || m.d.Name == "" {
+		return
+	}
+	if m.histories == nil {
+		m.histories = map[string]history{}
+	}
+	if m.selections == nil {
+		m.selections = map[string]map[string]bool{}
+	}
+	m.histories[m.d.Name] = cloneHistory(m.hist)
+	m.selections[m.d.Name] = cloneSel(m.selected)
+}
+
+func cloneHistory(h history) history {
+	cloneStack := func(in []snap) []snap {
+		out := make([]snap, len(in))
+		for i, s := range in {
+			out[i] = snap{d: cloneDiagram(s.d), sel: cloneSel(s.sel)}
+		}
+		return out
+	}
+	return history{undoStack: cloneStack(h.undoStack), redoStack: cloneStack(h.redoStack)}
+}
+
+func (m *model) openCanvas(d *canvas.Diagram) {
+	m.stashCanvasState()
+	m.d = d
+	m.mtime, _ = m.s.ModTime(d.Name)
+	if m.histories != nil {
+		m.hist = cloneHistory(m.histories[d.Name])
+	} else {
+		m.hist = history{}
+	}
+	m.tool = toolSelect
+	m.selected = cloneSel(m.selections[d.Name])
+	m.pruneSelection()
+	m.mouse = false
+	m.anchored = false
+	m.anchor = [2]int{}
+	m.pending = nil
+	m.selAct = selectNone
+	m.selAdd = false
+	m.panning = false
+	m.typing = false
+	m.textBuf = ""
+	m.editID = ""
+	m.phase = phaseEdit
+	m.status = ""
 }
 
 func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -389,15 +510,15 @@ func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.status = err.Error()
 			return nil
 		}
-		m.d = d
-		m.mtime, _ = m.s.ModTime(d.Name)
-		m.phase = phaseEdit
+		m.openCanvas(d)
 	case "esc":
 		m.phase = phasePick
 	case "backspace":
 		if len(m.nameInput) > 0 {
 			m.nameInput = m.nameInput[:len(m.nameInput)-1]
 		}
+	case "ctrl+v":
+		return readClipboardCmd()
 	default:
 		if msg.Text != "" {
 			m.nameInput += msg.Text
@@ -418,12 +539,53 @@ func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 		if len(m.textBuf) > 0 {
 			m.textBuf = m.textBuf[:len(m.textBuf)-1]
 		}
+	case "ctrl+v":
+		return readClipboardCmd()
 	default:
 		if msg.Text != "" {
 			m.textBuf += msg.Text
 		}
 	}
 	return nil
+}
+
+// acceptPaste inserts clipboard/bracketed-paste text into the active text
+// field. Text elements are a single string on one row, so newlines become
+// spaces. Paste is ignored when not naming or typing.
+func (m *model) acceptPaste(content string) {
+	text := flattenPaste(content)
+	if text == "" {
+		return
+	}
+	switch {
+	case m.phase == phaseName:
+		m.nameInput += text
+	case m.phase == phaseEdit && m.typing:
+		m.textBuf += text
+	}
+}
+
+// flattenPaste turns pasted text into one line for the text tool / name field.
+// Newlines and tabs become spaces, control characters are dropped, and runs of
+// spaces collapse so a multi-line paste does not leave gaps.
+func flattenPaste(s string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range s {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t' || r == ' ':
+			space = true
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f):
+			continue
+		default:
+			if space {
+				b.WriteByte(' ')
+				space = false
+			}
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -434,16 +596,14 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 	case bkey.Matches(msg, keyRedo):
 		m.doRedo()
 		return nil
-	case bkey.Matches(msg, keyZoomIn):
-		m.vp.zoomIn()
-		return nil
-	case bkey.Matches(msg, keyZoomOut):
-		m.vp.zoomOut()
-		return nil
 	}
 	switch msg.String() {
-	case "b", "l", "a", "t", "d", "m", "x":
+	case "1", "2", "3", "4", "5", "6":
 		m.switchTool(toolFor(msg.String()))
+	case "delete", "backspace":
+		if m.tool == toolSelect {
+			m.deleteSelected()
+		}
 	case "up":
 		m.moveCursor(0, -1)
 	case "down":
@@ -456,8 +616,44 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.keyCommit(msg.String() == "enter")
 	case "s":
 		m.startSend()
+	case "o":
+		m.openPicker()
+	case "?", "h":
+		m.openHelp()
 	case "esc":
-		m.toPicker()
+		m.editEsc()
+	case "q", "ctrl+c":
+		m.save()
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) editEsc() {
+	if m.cancelInFlight() {
+		return
+	}
+	if m.tool != toolSelect {
+		m.tool = toolSelect
+		return
+	}
+	m.clearSelection()
+}
+
+func (m *model) openHelp() {
+	m.mouse = false
+	m.anchored = false
+	m.anchor = [2]int{}
+	m.pending = nil
+	m.selAct = selectNone
+	m.panning = false
+	m.phase = phaseHelp
+}
+
+func (m *model) helpKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc", "?", "h":
+		m.phase = phaseEdit
 	case "q", "ctrl+c":
 		m.save()
 		return tea.Quit
@@ -492,14 +688,6 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 	switch msg.(type) {
 	case tea.MouseWheelMsg:
 		if !m.onCanvas(ev.X, ev.Y) {
-			return nil
-		}
-		if ev.Mod.Contains(tea.ModCtrl) {
-			if ev.Button == tea.MouseWheelUp {
-				m.vp.zoomIn()
-			} else if ev.Button == tea.MouseWheelDown {
-				m.vp.zoomOut()
-			}
 			return nil
 		}
 		dx, dy := 0, 0
@@ -559,9 +747,8 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 			m.startPan(ev.X, ev.Y)
 		}
 		if m.panning {
-			t := m.vp.tenths()
-			dx := (ev.X - m.panStart[0]) * 10 / t
-			dy := (ev.Y - m.panStart[1]) * 10 / t
+			dx := ev.X - m.panStart[0]
+			dy := ev.Y - m.panStart[1]
 			m.vp.origin[0] = max(0, m.panOrigin[0]-dx)
 			m.vp.origin[1] = max(0, m.panOrigin[1]-dy)
 			return nil
@@ -584,7 +771,7 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 }
 
 func (m *model) chromeClick(x, y int) tea.Cmd {
-	ch := layoutChrome(m.width, m.d.Name, m.vp.zoom, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
+	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
 	hit, ok := ch.hit(x, y, m.width, m.layoutHeight())
 	if !ok || !hit.enabled {
 		return nil
@@ -598,12 +785,22 @@ func (m *model) chromeClick(x, y int) tea.Cmd {
 		m.doRedo()
 	case chipSend:
 		m.startSend()
-	case chipZoom:
-		m.vp.setZoom(zoom1)
+	case chipHelp:
+		m.openHelp()
+	case chipName, chipCanvases:
+		m.openPicker()
 	case chipRecenter:
 		m.vp.recenter(m.d.Elements, m.width, m.canvasHeight())
 	}
 	return nil
+}
+
+func (m *model) openPicker() {
+	if m.typing {
+		m.commitTyping()
+	}
+	m.cancelInFlight()
+	m.toPicker()
 }
 
 func (m *model) switchTool(t tool) {
@@ -611,11 +808,18 @@ func (m *model) switchTool(t tool) {
 		m.commitTyping()
 	}
 	m.tool = t
-	m.grabID = ""
 	m.mouse = false
 	m.anchored = false
 	m.anchor = [2]int{}
 	m.pending = nil
+	m.selAct = selectNone
+	m.selAdd = false
+}
+
+func (m *model) beginNonSelectAction() {
+	if m.tool != toolSelect {
+		m.clearSelection()
+	}
 }
 
 func (m *model) moveCursor(dx, dy int) {
@@ -631,12 +835,19 @@ func (m *model) moveCursor(dx, dy int) {
 func (m *model) keyCommit(enter bool) {
 	switch m.tool {
 	case toolText:
+		m.beginNonSelectAction()
 		m.textPos = m.cursor
 		m.textBuf = ""
 		m.typing = true
-	case toolDelete:
-		m.deleteAt(m.cursor)
+	case toolSelect:
+		e := m.d.ElementAt(m.cursor[0], m.cursor[1])
+		if e == nil {
+			m.clearSelection()
+			return
+		}
+		m.selectOnly(e.ID)
 	case toolDraw:
+		m.beginNonSelectAction()
 		if enter {
 			if len(m.pending) > 0 {
 				m.apply(canvas.DrawCmd{Cells: m.drawCells()})
@@ -645,17 +856,10 @@ func (m *model) keyCommit(enter bool) {
 		}
 		m.addDrawCell(m.cursor)
 	default:
+		m.beginNonSelectAction()
 		if !m.anchored {
 			m.anchor = m.cursor
 			m.anchored = true
-			if m.tool == toolMove {
-				if e := m.d.ElementAt(m.cursor[0], m.cursor[1]); e != nil {
-					m.grabID = e.ID
-				} else {
-					m.anchored = false
-					m.status = "nothing to move here"
-				}
-			}
 			return
 		}
 		m.anchored = false
@@ -677,20 +881,21 @@ func (m *model) mouseMsg(msg tea.MouseMsg) tea.Cmd {
 	case tea.MouseClickMsg:
 		m.mouse = true
 		m.anchor = m.cursor
+		shift := ev.Mod.Contains(tea.ModShift)
 		switch m.tool {
 		case toolDraw:
+			m.beginNonSelectAction()
 			m.addDrawCell(m.cursor)
-		case toolMove:
-			if e := m.d.ElementAt(m.cursor[0], m.cursor[1]); e != nil {
-				m.grabID = e.ID
-			}
-		case toolDelete:
-			m.deleteAt(m.cursor)
+		case toolSelect:
+			m.selectClick(shift)
 		case toolText:
+			m.beginNonSelectAction()
 			m.textPos = m.cursor
 			m.textBuf = ""
 			m.typing = true
 			m.mouse = false // the release arrives while typing and is dropped
+		default:
+			m.beginNonSelectAction()
 		}
 	case tea.MouseMotionMsg:
 		if m.tool == toolDraw && m.mouse {
@@ -724,18 +929,8 @@ func (m *model) commit() {
 		if len(m.pending) > 0 {
 			m.apply(canvas.DrawCmd{Cells: m.drawCells()})
 		}
-	case toolMove:
-		if m.grabID != "" {
-			dx, dy := m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1]
-			m.apply(canvas.MoveCmd{ID: m.grabID, DX: dx, DY: dy})
-			m.grabID = ""
-		}
-	}
-}
-
-func (m *model) deleteAt(p [2]int) {
-	if e := m.d.ElementAt(p[0], p[1]); e != nil {
-		m.apply(canvas.DeleteCmd{ID: e.ID})
+	case toolSelect:
+		m.commitSelect()
 	}
 }
 
@@ -757,14 +952,33 @@ func (m *model) ensureVisible() {
 }
 
 func (m *model) apply(cmd canvas.Command) {
-	m.reloadIfChanged()
-	before := cloneDiagram(m.d)
-	if err := m.d.Apply(cmd); err != nil {
-		m.status = err.Error()
-		return
+	m.applyMany([]canvas.Command{cmd})
+}
+
+func (m *model) applyMany(cmds []canvas.Command) bool {
+	if len(cmds) == 0 {
+		return false
 	}
-	m.hist.push(before)
+	m.reloadIfChanged()
+	return m.commitCmds(cmds)
+}
+
+func (m *model) commitCmds(cmds []canvas.Command) bool {
+	if len(cmds) == 0 {
+		return false
+	}
+	before := cloneDiagram(m.d)
+	beforeSel := cloneSel(m.selected)
+	for _, cmd := range cmds {
+		if err := m.d.Apply(cmd); err != nil {
+			m.d = before
+			m.status = err.Error()
+			return false
+		}
+	}
+	m.hist.push(before, beforeSel)
 	m.save()
+	return true
 }
 
 func (m *model) restore(d *canvas.Diagram) {
@@ -776,22 +990,26 @@ func (m *model) doUndo() {
 	if m.discardInFlight() {
 		return
 	}
-	got, ok := m.hist.undo(m.d)
+	got, sel, ok := m.hist.undo(m.d, m.selected)
 	if !ok {
 		return
 	}
 	m.restore(got)
+	m.selected = sel
+	m.pruneSelection()
 }
 
 func (m *model) doRedo() {
 	if m.discardInFlight() {
 		return
 	}
-	got, ok := m.hist.redo(m.d)
+	got, sel, ok := m.hist.redo(m.d, m.selected)
 	if !ok {
 		return
 	}
 	m.restore(got)
+	m.selected = sel
+	m.pruneSelection()
 }
 
 func (m *model) discardInFlight() bool {
@@ -799,12 +1017,20 @@ func (m *model) discardInFlight() bool {
 		m.commitTyping()
 		return true
 	}
-	if m.mouse || m.anchored || len(m.pending) > 0 || m.grabID != "" {
+	if m.cancelInFlight() {
+		return true
+	}
+	return false
+}
+
+func (m *model) cancelInFlight() bool {
+	if m.mouse || m.anchored || len(m.pending) > 0 || m.selAct != selectNone {
 		m.mouse = false
 		m.anchored = false
 		m.anchor = [2]int{}
 		m.pending = nil
-		m.grabID = ""
+		m.selAct = selectNone
+		m.selAdd = false
 		return true
 	}
 	return false
@@ -814,7 +1040,7 @@ func (m *model) discardInFlight() bool {
 // since this session read it, so a CLI edit is not overwritten.
 // busy reports whether the person is part-way through an interaction.
 func (m model) busy() bool {
-	return m.mouse || m.anchored || m.typing || len(m.pending) > 0 || m.grabID != ""
+	return m.mouse || m.anchored || m.typing || len(m.pending) > 0 || m.selAct != selectNone
 }
 
 func (m model) inTextBuffer(p [2]int) bool {
@@ -838,6 +1064,7 @@ func (m *model) startTextEdit(e *canvas.Element) {
 			m.commitTyping()
 		}
 	}
+	m.clearSelection()
 	m.tool = toolText
 	m.editID = e.ID
 	m.textPos = [2]int{e.X, e.Y}
@@ -882,9 +1109,10 @@ func (m *model) reloadIfChanged() {
 		}
 		return
 	}
-	m.hist.push(m.d)
+	m.hist.push(m.d, m.selected)
 	m.d = d
 	m.mtime = mt
+	m.pruneSelection()
 	m.status = fmt.Sprintf("%s changed on disk; reloaded", d.Name)
 }
 
@@ -937,6 +1165,8 @@ func (m model) View() tea.View {
 		body = fmt.Sprintf("name: %s\n\nenter create · esc back\n%s\n%s\n", m.nameInput, m.status, m.noticeLine())
 	case phaseAgent:
 		body = m.agentView()
+	case phaseHelp:
+		body = m.helpView()
 	default:
 		body = m.editView()
 	}
@@ -944,6 +1174,95 @@ func (m model) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	return v
+}
+
+func (m model) helpView() string {
+	w := max(1, m.width)
+	h := max(1, m.height)
+	raw := helpLines(w)
+	var lines []string
+	for _, line := range raw {
+		lines = append(lines, wrapHelpLine(line, w)...)
+	}
+	close := "esc / ? / h close"
+	if len(lines) > h {
+		keep := max(1, h-1)
+		lines = append(lines[:keep], clipRunes(close, w))
+	}
+	for i, line := range lines {
+		lines[i] = clipRunes(line, w)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func helpLines(width int) []string {
+	if width < 48 {
+		return []string{
+			"herdr-canvas — help",
+			"Tools  1 sel 2 box 3 line 4 arr 5 txt 6 draw",
+			"Mouse  drag draw  click select/text",
+			"  double-click edit text  mid-drag pan",
+			"  wheel pan  shift=side  ctrl=same pan",
+			"Keys  arrows  space/enter commit",
+			"  del/backspace delete sel  ctrl+z/y undo",
+			"  s send  o/canvases picker  esc select",
+			"Send/Picker  ↑↓/jk enter esc  n=new",
+			"esc / ? / h close",
+		}
+	}
+	return []string{
+		"herdr-canvas — help",
+		"",
+		"Tools  1 select  2 box  3 line  4 arrow  5 text  6 draw  ? help",
+		"",
+		"Mouse",
+		"  left-drag      box, line, arrow, draw · select marquee / move",
+		"  left-click     select one · shift-click toggle · text to type",
+		"  double-click   edit existing text",
+		"  middle-drag    pan",
+		"  wheel          pan (shift: sideways; ctrl: same pan)",
+		"",
+		"Keyboard",
+		"  arrows         move cursor",
+		"  space / enter  anchor, then commit",
+		"  draw           space adds a cell; enter commits",
+		"  text           type · enter commit · esc cancel",
+		"  delete         selected elements · both delete keys",
+		"",
+		"View   click canvases (o) to open picker · recenter fits drawing",
+		"Edit   ctrl+z undo · ctrl+y redo · s send · o picker · esc select · q quit",
+		"Send   ↑↓/jk choose · enter send · esc cancel",
+		"Picker ↑↓/jk · enter open · n new · delete confirm · esc back",
+		"",
+		"esc / ? / h close",
+	}
+}
+
+func wrapHelpLine(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	r := []rune(s)
+	if len(r) <= width {
+		return []string{s}
+	}
+	var out []string
+	for len(r) > width {
+		out = append(out, string(r[:width]))
+		r = r[width:]
+	}
+	if len(r) > 0 {
+		out = append(out, string(r))
+	}
+	return out
+}
+
+func clipRunes(s string, width int) string {
+	r := []rune(s)
+	if len(r) <= width {
+		return s
+	}
+	return string(r[:width])
 }
 
 func (m model) pickView() string {
@@ -958,7 +1277,7 @@ func (m model) pickView() string {
 		b.WriteString(n)
 		b.WriteString("\n")
 	}
-	b.WriteString("\n↑/↓ choose · enter open · n new · esc back · q quit\n")
+	b.WriteString("\n↑/↓ choose · enter open · n new · del delete · esc back · q quit\n")
 	if line := m.noticeLine(); line != "" {
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -974,8 +1293,11 @@ func (m *model) badge() string {
 	if m.typing {
 		return ""
 	}
-	if m.grabID != "" {
-		return fmt.Sprintf("moving %s %+d%+d", m.grabID, m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1])
+	if m.tool == toolSelect && m.selAct == selectMove {
+		return fmt.Sprintf("moving %d %+d%+d", len(m.selected), m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1])
+	}
+	if m.tool == toolSelect && len(m.selected) > 0 && m.selAct != selectMarquee {
+		return fmt.Sprintf("%d sel", len(m.selected))
 	}
 	if m.mouse || m.anchored {
 		return fmt.Sprintf("%dx%d", abs(m.cursor[0]-m.anchor[0])+1, abs(m.cursor[1]-m.anchor[1])+1)
@@ -985,10 +1307,10 @@ func (m *model) badge() string {
 
 func (m model) editView() string {
 	g := m.d.Render()
-	if m.mouse || m.anchored || m.typing || len(m.pending) > 0 {
+	if m.mouse || m.anchored || m.typing || len(m.pending) > 0 || len(m.selected) > 0 {
 		g = m.overlayPreview(g)
 	}
-	ch := layoutChrome(m.width, m.d.Name, m.vp.zoom, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
+	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
 	var b strings.Builder
 	b.WriteString(ch.header)
 	b.WriteString("\n")
@@ -1030,31 +1352,35 @@ func styleChromeFooter(ch chrome, active tool, canUndo, canRedo bool) string {
 	return out.String()
 }
 
-// movePreview replaces the grabbed element with a copy at the dragged offset,
-// and leaves a ghost outline where the element came from.
-func (m model) movePreview(elems []canvas.Element) []canvas.Element {
+// movePreview replaces grabbed elements with copies at the dragged offset,
+// and leaves a ghost outline where each element came from.
+func (m model) movePreview(elems []canvas.Element, ids map[string]bool) []canvas.Element {
 	dx, dy := m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1]
-	out := make([]canvas.Element, 0, len(elems)+1)
-	var grabbed canvas.Element
-	found := false
+	out := make([]canvas.Element, 0, len(elems)+len(ids))
+	var grabbed []canvas.Element
 	for _, e := range elems {
-		if e.ID == m.grabID {
-			grabbed, found = e, true
+		if ids[e.ID] {
+			grabbed = append(grabbed, e)
 			continue
 		}
 		out = append(out, e)
 	}
-	if !found {
-		return elems
-	}
-	moved, err := canvas.Translate(grabbed, dx, dy)
-	if err != nil {
+	if len(grabbed) == 0 {
 		return elems
 	}
 	if dx != 0 || dy != 0 {
-		out = append(out, canvas.Element{Type: canvas.Freeform, Cells: ghostCells(grabbed)})
+		for _, e := range grabbed {
+			out = append(out, canvas.Element{Type: canvas.Freeform, Cells: ghostCells(e)})
+		}
 	}
-	return append(out, moved)
+	for _, e := range grabbed {
+		moved, err := canvas.Translate(e, dx, dy)
+		if err != nil {
+			return elems
+		}
+		out = append(out, moved)
+	}
+	return out
 }
 
 // ghostCells renders one element on its own and returns its cells as the ghost
@@ -1094,8 +1420,24 @@ func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 			Arrow: m.lineArrow(),
 		})
 	}
-	if m.tool == toolMove && m.grabID != "" {
-		elems = m.movePreview(elems)
+	if m.tool == toolSelect && m.selAct == selectMove && len(m.selected) > 0 {
+		elems = m.movePreview(elems, m.selected)
+	}
+	if m.tool == toolSelect && m.selAct == selectMarquee {
+		x1, y1 := min(m.anchor[0], m.cursor[0]), min(m.anchor[1], m.cursor[1])
+		x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
+		elems = append(elems, canvas.Element{Type: canvas.Box, X1: x1, Y1: y1, X2: x2, Y2: y2})
+	}
+	if len(m.selected) > 0 && m.selAct != selectMove {
+		var marks []canvas.Cell
+		for _, e := range elems {
+			if m.selected[e.ID] {
+				marks = append(marks, selectionMarkers(e)...)
+			}
+		}
+		if len(marks) > 0 {
+			elems = append(elems, canvas.Element{Type: canvas.Freeform, Cells: marks})
+		}
 	}
 	if m.typing {
 		if m.editID != "" {
@@ -1124,36 +1466,36 @@ func (m model) statusLine() string {
 		return m.status
 	}
 	extra := ""
-	if m.grabID != "" {
-		extra = fmt.Sprintf(" · moving %s %+d%+d", m.grabID, m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1])
+	if m.tool == toolSelect && m.selAct == selectMove {
+		extra = fmt.Sprintf(" · moving %d %+d%+d", len(m.selected), m.cursor[0]-m.anchor[0], m.cursor[1]-m.anchor[1])
+	} else if m.tool == toolSelect && len(m.selected) > 0 {
+		extra = fmt.Sprintf(" · %d selected", len(m.selected))
 	} else if m.mouse || m.anchored {
 		extra = fmt.Sprintf(" · %dx%d", abs(m.cursor[0]-m.anchor[0])+1, abs(m.cursor[1]-m.anchor[1])+1)
 	}
 	if m.anchored {
 		extra += fmt.Sprintf(" · anchor (%d,%d)", m.anchor[0], m.anchor[1])
 	}
-	return fmt.Sprintf("[%s] @(%d,%d)%s   b/l/a/t/d/m/x · drag · s send · esc picker · q quit",
+	return fmt.Sprintf("[%s] @(%d,%d)%s   1-6 tools · drag · s send · o picker · esc select · q quit",
 		toolNames[m.tool], m.cursor[0], m.cursor[1], extra)
 }
 
 func toolFor(k string) tool {
 	switch k {
-	case "b":
+	case "1":
+		return toolSelect
+	case "2":
 		return toolBox
-	case "l":
+	case "3":
 		return toolLine
-	case "a":
+	case "4":
 		return toolArrow
-	case "t":
+	case "5":
 		return toolText
-	case "d":
+	case "6":
 		return toolDraw
-	case "m":
-		return toolMove
-	case "x":
-		return toolDelete
 	}
-	return toolBox
+	return toolSelect
 }
 
 func min(a, b int) int {

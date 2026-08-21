@@ -34,3 +34,40 @@ func TestElementAt(t *testing.T) {
 		}
 	}
 }
+
+func TestElementsInRect(t *testing.T) {
+	d := &Diagram{}
+	for _, c := range []Command{
+		BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2},
+		BoxCmd{X1: 10, Y1: 10, X2: 12, Y2: 12},
+		TextCmd{X: 5, Y: 1, Text: "hi"},
+	} {
+		if err := d.Apply(c); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+	}
+	got := d.ElementsInRect(1, 0, 6, 2)
+	if len(got) != 2 {
+		t.Fatalf("got %d elements, want 2", len(got))
+	}
+	ids := map[string]bool{got[0].ID: true, got[1].ID: true}
+	if !ids["b1"] || !ids["t3"] {
+		t.Errorf("ids = %v, want b1 and t3", ids)
+	}
+	if n := len(d.ElementsInRect(20, 20, 22, 22)); n != 0 {
+		t.Errorf("empty rect hit %d elements", n)
+	}
+}
+
+func TestElementBounds(t *testing.T) {
+	e := Element{Type: Box, X1: 1, Y1: 2, X2: 4, Y2: 5}
+	x1, y1, x2, y2, ok := e.Bounds()
+	if !ok || x1 != 1 || y1 != 2 || x2 != 4 || y2 != 5 {
+		t.Errorf("box bounds = %d,%d,%d,%d ok=%v", x1, y1, x2, y2, ok)
+	}
+	e = Element{Type: Text, X: 3, Y: 7, Text: "ab"}
+	x1, y1, x2, y2, ok = e.Bounds()
+	if !ok || x1 != 3 || y1 != 7 || x2 != 4 || y2 != 7 {
+		t.Errorf("text bounds = %d,%d,%d,%d ok=%v", x1, y1, x2, y2, ok)
+	}
+}
