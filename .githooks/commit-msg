@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
-set -e
+set -eu
+
 # Commit messages carry the change, not the tooling.
-grep -viE '(^|^[^a-z]*)(co-authored-by:|generated with|assisted-by:|created-by:).*(cursor|claude|copilot|codex|agent|ai)' "$1" > "$1.tmp" || true
-mv "$1.tmp" "$1"
+root=$(git rev-parse --show-toplevel)
+sh "$root/scripts/check-commit-message.sh" < "$1"

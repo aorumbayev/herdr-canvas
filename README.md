@@ -226,6 +226,17 @@ Then run `herdr-canvas list`, open the diagram for this repository with
 Element commands read the diagram for the current repository. Pass `--name` to
 choose another one, and `--create` to create a diagram that does not exist yet.
 
+## Development
+
+After cloning, install the repository hooks and run the tests:
+
+```sh
+make setup
+go test ./...
+```
+
+The commit-message hook and CI reject AI attribution trailers.
+
 ## Releases
 
 Releases follow [Conventional Commits](https://www.conventionalcommits.org).

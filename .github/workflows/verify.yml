@@ -23,6 +23,27 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check commit messages
+        if: matrix.name == 'linux'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -eu
+          zero=0000000000000000000000000000000000000000
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "$zero" ]; then
+            range=$HEAD_SHA
+          else
+            range=$BASE_SHA..$HEAD_SHA
+          fi
+          for commit in $(git rev-list "$range"); do
+            if ! git show -s --format=%B "$commit" | sh scripts/check-commit-message.sh; then
+              echo "forbidden attribution in commit $commit"
+              exit 1
+            fi
+          done
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
