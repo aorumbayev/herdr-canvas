@@ -140,3 +140,16 @@ func (s *Store) List() ([]string, error) {
 	sort.Strings(names)
 	return names, nil
 }
+
+// Delete removes a named diagram from the store. A missing diagram is not an
+// error.
+func (s *Store) Delete(name string) error {
+	if err := validateName(name); err != nil {
+		return err
+	}
+	err := os.Remove(s.Path(name))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}

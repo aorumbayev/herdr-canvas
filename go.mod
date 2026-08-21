@@ -6,6 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.1.1
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
+	github.com/atotto/clipboard v0.1.4
 	github.com/creativeprojects/go-selfupdate v1.6.0
 	github.com/spf13/cobra v1.10.2
 )

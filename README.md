@@ -105,24 +105,36 @@ canvas opens the diagram named for that repository and branch, for example
 `herdr-canvas@main`. When you are not, a picker lists your diagrams and offers
 to create one.
 
-Pick a tool with one key, then drag with the left mouse button:
+Pick a tool with a number key (or the footer chips), then drag with the left
+mouse button. Select is the default when a canvas opens.
 
 | Key | Tool             |
 | --- | ---------------- |
-| `b` | Box              |
-| `l` | Line             |
-| `a` | Arrow            |
-| `t` | Text             |
-| `d` | Draw (freeform)  |
-| `m` | Move             |
-| `x` | Delete           |
+| `1` | Select           |
+| `2` | Box              |
+| `3` | Line             |
+| `4` | Arrow            |
+| `5` | Text             |
+| `6` | Draw (freeform)  |
 | `s` | Send to agent    |
-| `esc` | Diagram picker |
+| `o` / `canvases` header control | Diagram picker |
+| `?` / `h` / help chip | Help (controls) |
+| `esc` | Cancel, then Select, then clear selection |
 | `q` | Quit             |
 
-Press `esc` to leave the drawing for the list of your diagrams, and `esc` again
-to go back to it. The list reads the store each time, so a diagram your agent
-made while you drew is in it.
+The canvas draws at 1×. The wheel pans (shift pans sideways; ctrl pans the
+same way). Middle-drag pans. Recenter fits the drawing in the view.
+
+In Select, click replaces the selection, shift-click toggles membership, and
+a drag on empty space marquees. Shift-marquee adds. Drag a selected element
+to move the whole selection. Delete and Backspace remove the selection as
+one undo step. `x` never deletes and never changes tools.
+
+Press `o` to leave the drawing for the list of your diagrams, and `esc` to
+go back to it. The list reads the store each time, so a diagram your agent
+made while you drew is in it. In the picker, Delete or Backspace asks
+`delete "name"? y/N` before removing a diagram. Canvas deletion is not an
+undo step.
 
 A line and an arrow run on one axis, then on the other axis. The bend gets a
 corner glyph. An arrow gets one arrowhead at its end. Boxes and lines use one

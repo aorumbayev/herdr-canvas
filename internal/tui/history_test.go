@@ -18,9 +18,9 @@ func sample(t *testing.T, label string) *canvas.Diagram {
 func TestHistoryUndoRestoresElementsAndNext(t *testing.T) {
 	h := history{}
 	before := &canvas.Diagram{Name: "demo"}
-	h.push(before)
+	h.push(before, nil)
 	d := sample(t, "a")
-	got, ok := h.undo(d)
+	got, _, ok := h.undo(d, nil)
 	if !ok {
 		t.Fatal("undo = false")
 	}
@@ -35,11 +35,11 @@ func TestHistoryUndoRestoresElementsAndNext(t *testing.T) {
 func TestHistoryRedoRestoresTheSameID(t *testing.T) {
 	h := history{}
 	empty := &canvas.Diagram{Name: "demo"}
-	h.push(empty)
+	h.push(empty, nil)
 	d := sample(t, "a")
 	id := d.Elements[0].ID
-	undone, _ := h.undo(d)
-	got, ok := h.redo(undone)
+	undone, _, _ := h.undo(d, nil)
+	got, _, ok := h.redo(undone, nil)
 	if !ok {
 		t.Fatal("redo = false")
 	}
@@ -51,13 +51,13 @@ func TestHistoryRedoRestoresTheSameID(t *testing.T) {
 func TestHistorySkipsEqualClone(t *testing.T) {
 	h := history{}
 	d := sample(t, "a")
-	h.push(d)
-	h.push(d)
-	_, ok := h.undo(d)
+	h.push(d, nil)
+	h.push(d, nil)
+	_, _, ok := h.undo(d, nil)
 	if !ok {
 		t.Fatal("first undo")
 	}
-	if _, ok := h.undo(d); ok {
+	if _, _, ok := h.undo(d, nil); ok {
 		t.Fatal("duplicate push created a second undo")
 	}
 }
@@ -66,12 +66,12 @@ func TestHistoryCapsAt50(t *testing.T) {
 	h := history{}
 	for i := 0; i < 51; i++ {
 		d := &canvas.Diagram{Name: "demo", Next: i}
-		h.push(d)
+		h.push(d, nil)
 	}
 	if len(h.undoStack) != 50 {
 		t.Errorf("len = %d, want 50", len(h.undoStack))
 	}
-	got, _ := h.undo(&canvas.Diagram{Name: "demo"})
+	got, _, _ := h.undo(&canvas.Diagram{Name: "demo"}, nil)
 	if got.Next != 50 {
 		t.Errorf("oldest kept Next = %d, want 50 (dropped 0)", got.Next)
 	}
@@ -80,9 +80,9 @@ func TestHistoryCapsAt50(t *testing.T) {
 func TestHistoryCloneIsDeep(t *testing.T) {
 	h := history{}
 	d := sample(t, "a")
-	h.push(d)
+	h.push(d, nil)
 	d.Elements[0].Label = "mutated"
-	got, _ := h.undo(d)
+	got, _, _ := h.undo(d, nil)
 	if got.Elements[0].Label == "mutated" {
 		t.Fatal("undo saw the later mutation")
 	}
@@ -90,15 +90,15 @@ func TestHistoryCloneIsDeep(t *testing.T) {
 
 func TestHistoryPushClearsRedo(t *testing.T) {
 	h := history{}
-	h.push(&canvas.Diagram{Name: "demo"})
+	h.push(&canvas.Diagram{Name: "demo"}, nil)
 	d := sample(t, "a")
-	if _, ok := h.undo(d); !ok {
+	if _, _, ok := h.undo(d, nil); !ok {
 		t.Fatal("undo")
 	}
 	if !h.canRedo() {
 		t.Fatal("expected redo after undo")
 	}
-	h.push(sample(t, "b"))
+	h.push(sample(t, "b"), nil)
 	if h.canRedo() {
 		t.Fatal("push after undo kept redo")
 	}
@@ -107,23 +107,47 @@ func TestHistoryPushClearsRedo(t *testing.T) {
 func TestHistoryEmptyUndoRedoAreNoops(t *testing.T) {
 	h := history{}
 	d := sample(t, "a")
-	if _, ok := h.undo(d); ok {
+	if _, _, ok := h.undo(d, nil); ok {
 		t.Fatal("undo on empty")
 	}
-	if _, ok := h.redo(d); ok {
+	if _, _, ok := h.redo(d, nil); ok {
 		t.Fatal("redo on empty")
+	}
+}
+
+func TestHistoryRestoresSelection(t *testing.T) {
+	h := history{}
+	before := &canvas.Diagram{Name: "demo"}
+	h.push(before, map[string]bool{"b1": true})
+	d := sample(t, "a")
+	got, sel, ok := h.undo(d, nil)
+	if !ok {
+		t.Fatal("undo")
+	}
+	if len(got.Elements) != 0 {
+		t.Fatalf("elements = %d", len(got.Elements))
+	}
+	if !sel["b1"] {
+		t.Fatalf("sel = %v, want b1 from snapshot", sel)
+	}
+	_, sel, ok = h.redo(got, sel)
+	if !ok {
+		t.Fatal("redo")
+	}
+	if len(sel) != 0 {
+		t.Fatalf("redo sel = %v, want empty current-at-undo", sel)
 	}
 }
 
 func TestHistoryDropsTheOldest(t *testing.T) {
 	h := history{}
 	for i := 0; i < 51; i++ {
-		h.push(&canvas.Diagram{Name: "demo", Next: i})
+		h.push(&canvas.Diagram{Name: "demo", Next: i}, nil)
 	}
 	var n int
 	cur := &canvas.Diagram{Name: "demo"}
 	for {
-		got, ok := h.undo(cur)
+		got, _, ok := h.undo(cur, nil)
 		if !ok {
 			break
 		}

@@ -13,7 +13,9 @@ const (
 	chipUndo
 	chipRedo
 	chipSend
-	chipZoom
+	chipHelp
+	chipName
+	chipCanvases
 	chipRecenter
 )
 
@@ -39,12 +41,11 @@ type chipSpec struct {
 	group   int
 }
 
-func layoutChrome(width int, name string, zoom int, cursor [2]int, active tool, canUndo, canRedo bool, badge string) chrome {
+func layoutChrome(width int, name string, cursor [2]int, active tool, canUndo, canRedo bool, badge string) chrome {
 	if width < 1 {
 		width = 1
 	}
-	zoomLabel := formatZoom(zoom)
-	right := fmt.Sprintf("%s  recenter  (%d,%d)", zoomLabel, cursor[0], cursor[1])
+	right := fmt.Sprintf("canvases  recenter  (%d,%d)", cursor[0], cursor[1])
 	left := name
 	leftW := len([]rune(left))
 	rightW := len([]rune(right))
@@ -63,10 +64,13 @@ func layoutChrome(width int, name string, zoom int, cursor [2]int, active tool, 
 
 	var ch chrome
 	ch.header = header
-	zx := lastIndexOfRunes(header, zoomLabel)
-	if zx >= 0 {
-		zw := len([]rune(zoomLabel))
-		ch.chips = append(ch.chips, chip{kind: chipZoom, x0: zx, x1: zx + zw, row: 0, enabled: true})
+	if leftW > 0 {
+		ch.chips = append(ch.chips, chip{kind: chipName, x0: 0, x1: leftW, row: 0, enabled: true})
+	}
+	cx := lastIndexOfRunes(header, "canvases")
+	if cx >= 0 {
+		cw := len([]rune("canvases"))
+		ch.chips = append(ch.chips, chip{kind: chipCanvases, x0: cx, x1: cx + cw, row: 0, enabled: true})
 	}
 	rx := lastIndexOfRunes(header, "recenter")
 	if rx >= 0 {
@@ -75,28 +79,28 @@ func layoutChrome(width int, name string, zoom int, cursor [2]int, active tool, 
 	}
 
 	full := []chipSpec{
-		{"box", chipTool, toolBox, true, 0},
-		{"line", chipTool, toolLine, true, 0},
-		{"arrow", chipTool, toolArrow, true, 0},
-		{"text", chipTool, toolText, true, 0},
-		{"draw", chipTool, toolDraw, true, 0},
-		{"move", chipTool, toolMove, true, 0},
-		{"del", chipTool, toolDelete, true, 0},
+		{"1 sel", chipTool, toolSelect, true, 0},
+		{"2 box", chipTool, toolBox, true, 0},
+		{"3 line", chipTool, toolLine, true, 0},
+		{"4 arrow", chipTool, toolArrow, true, 0},
+		{"5 text", chipTool, toolText, true, 0},
+		{"6 draw", chipTool, toolDraw, true, 0},
 		{"undo", chipUndo, 0, canUndo, 1},
 		{"redo", chipRedo, 0, canRedo, 1},
 		{"send", chipSend, 0, true, 2},
+		{"help", chipHelp, 0, true, 2},
 	}
 	short := []chipSpec{
-		{"b", chipTool, toolBox, true, 0},
-		{"l", chipTool, toolLine, true, 0},
-		{"a", chipTool, toolArrow, true, 0},
-		{"t", chipTool, toolText, true, 0},
-		{"d", chipTool, toolDraw, true, 0},
-		{"m", chipTool, toolMove, true, 0},
-		{"x", chipTool, toolDelete, true, 0},
+		{"1", chipTool, toolSelect, true, 0},
+		{"2", chipTool, toolBox, true, 0},
+		{"3", chipTool, toolLine, true, 0},
+		{"4", chipTool, toolArrow, true, 0},
+		{"5", chipTool, toolText, true, 0},
+		{"6", chipTool, toolDraw, true, 0},
 		{"↶", chipUndo, 0, canUndo, 1},
 		{"↷", chipRedo, 0, canRedo, 1},
 		{"s", chipSend, 0, true, 2},
+		{"?", chipHelp, 0, true, 2},
 	}
 
 	specs := full
@@ -243,19 +247,6 @@ func lastIndexOfRunes(s, sub string) int {
 		}
 	}
 	return -1
-}
-
-func formatZoom(tenths int) string {
-	switch tenths {
-	case zoom05:
-		return "0.5x"
-	case zoom15:
-		return "1.5x"
-	case zoom2:
-		return "2x"
-	default:
-		return "1x"
-	}
 }
 
 func truncate(s string, n int) string {
