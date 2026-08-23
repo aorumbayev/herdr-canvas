@@ -102,8 +102,12 @@ func labelContrast(e Element) string {
 
 func paintLine(m map[[2]int]CellPaint, e Element) {
 	g := Grid{}
+	for p, cp := range m {
+		g[p] = cp.Ch
+	}
 	drawLine(g, e)
-	for p, ch := range g {
-		setPaint(m, p, CellPaint{Ch: ch, FG: e.Color})
+	pts, _ := elbow(e.X1, e.Y1, e.X2, e.Y2)
+	for _, p := range pts {
+		setPaint(m, p, CellPaint{Ch: g[p], FG: e.Color})
 	}
 }
