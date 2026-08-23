@@ -10,23 +10,28 @@ type Command interface {
 type BoxCmd struct {
 	X1, Y1, X2, Y2 int
 	Label          string
+	Color          string
+	Fill           bool
 }
 
 // LineCmd adds a Line (two endpoints) with an optional arrow.
 type LineCmd struct {
 	X1, Y1, X2, Y2 int
 	Arrow          Arrow
+	Color          string
 }
 
 // TextCmd adds a Text string at a coordinate.
 type TextCmd struct {
-	X, Y int
-	Text string
+	X, Y  int
+	Text  string
+	Color string
 }
 
 // DrawCmd adds a Freeform element.
 type DrawCmd struct {
 	Cells []Cell
+	Color string
 }
 
 // MoveCmd translates an existing element by (DX, DY).
@@ -53,6 +58,18 @@ type TextSetCmd struct {
 	Text string
 }
 
+// ColorCmd sets an element's foreground color. "default" clears it.
+type ColorCmd struct {
+	ID    string
+	Color string
+}
+
+// FillCmd sets whether a box paints its interior.
+type FillCmd struct {
+	ID   string
+	Fill bool
+}
+
 func (BoxCmd) command()     {}
 func (LineCmd) command()    {}
 func (TextCmd) command()    {}
@@ -61,3 +78,5 @@ func (MoveCmd) command()    {}
 func (DeleteCmd) command()  {}
 func (LabelCmd) command()   {}
 func (TextSetCmd) command() {}
+func (ColorCmd) command()   {}
+func (FillCmd) command()    {}

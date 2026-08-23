@@ -402,7 +402,7 @@ func TestLineSnapsBothEndpoints(t *testing.T) {
 func TestClickArrowChipSelectsArrow(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 80, Height: 12})
-	ch := layoutChrome(80, m.d.Name, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), "")
+	ch := layoutChrome(80, m.d.Name, m.cursor, "", false, m.tool, m.hist.canUndo(), m.hist.canRedo(), "")
 	idx := indexOf(ch.footer, "arrow")
 	m = send(t, m, leftDown(idx, 11), leftUp(idx, 11))
 	if m.tool != toolArrow {
@@ -425,7 +425,7 @@ func TestClickNameChipOpensPicker(t *testing.T) {
 	if err := m.s.Save(&canvas.Diagram{Name: "other"}); err != nil {
 		t.Fatal(err)
 	}
-	ch := layoutChrome(40, m.d.Name, m.cursor, m.tool, false, false, "")
+	ch := layoutChrome(40, m.d.Name, m.cursor, "", false, m.tool, false, false, "")
 	m = send(t, m, leftDown(0, 0), leftUp(0, 0))
 	if m.phase != phasePick {
 		t.Errorf("phase = %v, want picker after name click (header %q)", m.phase, ch.header)
@@ -435,7 +435,7 @@ func TestClickNameChipOpensPicker(t *testing.T) {
 func TestClickCanvasesControlOpensPicker(t *testing.T) {
 	m := editor(t)
 	m = send(t, m, tea.WindowSizeMsg{Width: 40, Height: 12})
-	ch := layoutChrome(40, m.d.Name, m.cursor, m.tool, false, false, "")
+	ch := layoutChrome(40, m.d.Name, m.cursor, "", false, m.tool, false, false, "")
 	idx := indexOf(ch.header, "canvases")
 	if idx < 0 {
 		t.Fatalf("header has no canvases control: %q", ch.header)
@@ -453,7 +453,7 @@ func TestClickRecenterCentersSmallBox(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.vp.origin = [2]int{20, 20}
-	ch := layoutChrome(40, m.d.Name, m.cursor, m.tool, false, false, "")
+	ch := layoutChrome(40, m.d.Name, m.cursor, "", false, m.tool, false, false, "")
 	idx := indexOf(ch.header, "recenter")
 	if idx < 0 {
 		t.Fatalf("header %q", ch.header)
@@ -1093,7 +1093,7 @@ func TestHelpKeyDoesNotOpenWhileTyping(t *testing.T) {
 func TestHelpChipOpensHelp(t *testing.T) {
 	m := editor(t)
 	m.width, m.height = 80, 12
-	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.tool, true, true, "")
+	ch := layoutChrome(m.width, m.d.Name, m.cursor, "", false, m.tool, true, true, "")
 	idx := lastIndexOfRunes(ch.footer, "help")
 	if idx < 0 {
 		t.Fatalf("footer %q has no help chip", ch.footer)

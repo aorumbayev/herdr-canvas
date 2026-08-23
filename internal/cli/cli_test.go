@@ -62,7 +62,9 @@ func TestCLIBoxTextExport(t *testing.T) {
 	run(t, "--name", "demo", "box", "0", "0", "3", "2")
 	run(t, "--name", "demo", "text", "1", "1", "hi")
 	got := run(t, "--name", "demo", "export")
-	want := "┌──┐\n│hi│\n└──┘\n"
+	want := "┌──┐\n│hi│\n└──┘\n" +
+		"b1 box 0,0-3,2\n" +
+		"t2 text 1,1 \"hi\"\n"
 	if got != want {
 		t.Errorf("export = %q, want %q", got, want)
 	}
@@ -100,8 +102,26 @@ func TestCLICreateFlagCreatesDiagram(t *testing.T) {
 		t.Fatalf("box --create: %v", err)
 	}
 	got := run(t, "--name", "demo", "export")
-	want := "┌──┐\n│hi│\n└──┘\n"
+	want := "┌──┐\n│hi│\n└──┘\n" +
+		"b1 box 0,0-3,2 \"hi\"\n"
 	if got != want {
 		t.Errorf("export = %q, want %q", got, want)
+	}
+}
+
+func TestCLIColorAndFill(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	run(t, "new", "demo")
+	run(t, "--name", "demo", "box", "0", "0", "3", "2", "--color", "red", "--fill")
+	run(t, "--name", "demo", "color", "b1", "blue")
+	run(t, "--name", "demo", "fill", "b1", "off")
+	got := run(t, "--name", "demo", "export")
+	if !strings.Contains(got, "b1 box 0,0-3,2 blue") {
+		t.Errorf("export = %q, want blue box without fill", got)
+	}
+	root := newRootCmd()
+	root.SetArgs([]string{"--name", "demo", "fill", "b1", "maybe"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("want error for fill maybe")
 	}
 }

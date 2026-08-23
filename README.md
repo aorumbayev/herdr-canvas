@@ -116,6 +116,8 @@ mouse button. Select is the default when a canvas opens.
 | `4` | Arrow            |
 | `5` | Text             |
 | `6` | Draw (freeform)  |
+| `c` | Color palette    |
+| `f` | Fill toggle      |
 | `s` | Send to agent    |
 | `o` / `canvases` header control | Diagram picker |
 | `?` / `h` / help chip | Help (controls) |
@@ -215,9 +217,10 @@ Then run `herdr-canvas list`, open the diagram for this repository with
 | `herdr-canvas new <name>`         | Create a diagram                                |
 | `herdr-canvas open <name>`        | Open a diagram by name                          |
 | `herdr-canvas list`               | List every diagram in the store                 |
-| `herdr-canvas export`             | Print the diagram as text                       |
-| `herdr-canvas box\|line\|text\|draw` | Add an element                               |
+| `herdr-canvas export`             | Print the diagram as text with a legend       |
+| `herdr-canvas box\|line\|text\|draw` | Add an element (`--color`, box `--fill`)   |
 | `herdr-canvas move\|delete\|label`  | Change an element                            |
+| `herdr-canvas color\|fill`          | Set an element's color or box fill            |
 | `herdr-canvas skill`              | Print the agent instructions                    |
 | `herdr-canvas setup`              | Install the herdr hotkey                        |
 | `herdr-canvas update`             | Install a newer published release               |

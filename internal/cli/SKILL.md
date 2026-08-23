@@ -29,14 +29,16 @@ running inside a git repo.
 herdr-canvas new <name>                  # create an empty diagram
 herdr-canvas open <name>                 # open an existing diagram in the TUI
 herdr-canvas list                        # list diagrams
-herdr-canvas export [--name <name>]      # print the grid as text
-herdr-canvas box <x1> <y1> <x2> <y2> [label]
-herdr-canvas line <x1> <y1> <x2> <y2> [--arrow none|start|end|both]
-herdr-canvas text <x> <y> <text>
-herdr-canvas draw <x> <y> <ch> [<x> <y> <ch> ...]   # freeform cells
+herdr-canvas export [--name <name>]      # print the grid as text + legend
+herdr-canvas box <x1> <y1> <x2> <y2> [label] [--color <name>] [--fill]
+herdr-canvas line <x1> <y1> <x2> <y2> [--arrow none|start|end|both] [--color <name>]
+herdr-canvas text <x> <y> <text> [--color <name>]
+herdr-canvas draw <x> <y> <ch> [<x> <y> <ch> ...] [--color <name>]
 herdr-canvas move <id> <dx> <dy>                 # dx/dy may be negative
 herdr-canvas delete <id>
 herdr-canvas label <id> <label>
+herdr-canvas color <id> <name>                   # default clears color
+herdr-canvas fill <id> on|off                    # box only
 herdr-canvas skill                       # print this document
 herdr-canvas setup                       # install the herdr hotkey binding
 ```
@@ -52,7 +54,9 @@ rejections:
 1. **Referential integrity** — a command names an id that does not exist;
    the error echoes the id.
 2. **Well-formed commands** — `x2 ≥ x1` and `y2 ≥ y1` for boxes, non-empty
-   text, non-negative coordinates.
+   text, non-negative coordinates, known color names (`red`, `green`, `yellow`,
+   `blue`, `magenta`, `cyan`, `white`, `black`, or `default` to clear), and
+   `fill` only on boxes.
 
 Everything spatial is allowed: nesting, overlap, crossing lines, dangling
 lines. Cell conflicts resolve by z-order; crossing lines render junction
@@ -78,7 +82,7 @@ places an arrowhead (`►`, `◄`, `▲`, `▼`) on the end that `--arrow` names
   "name": "demo",
   "next": 4,
   "elements": [
-    { "id": "b1", "type": "box", "x1": 0, "y1": 0, "x2": 3, "y2": 2, "label": "hi" },
+    { "id": "b1", "type": "box", "x1": 0, "y1": 0, "x2": 3, "y2": 2, "label": "hi", "color": "red", "fill": true },
     { "id": "l2", "type": "line", "x1": 0, "y1": 0, "x2": 5, "y2": 5, "arrow": "end" },
     { "id": "t3", "type": "text", "x": 1, "y": 1, "text": "hello" },
     { "id": "f4", "type": "freeform", "cells": [ { "x": 0, "y": 0, "ch": "#" } ] }
@@ -88,13 +92,20 @@ places an arrowhead (`►`, `◄`, `▲`, `▼`) on the end that `--arrow` names
 
 ## Export format
 
-`export` renders the bounding rectangle of the grid as space-filled text with
-trailing whitespace trimmed, e.g.:
+`export` prints the picture, then a blank line, then one legend line per
+element. Read the legend for ids, colors, fill, and text. Color names:
+`red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `black`.
+Omit `color` when default. `fill` appears only on filled boxes.
 
 ```
 ┌──┐
 │hi│
 └──┘
+
+b1 box 0,0-3,2 red fill "hi"
+l2 line 3,1-10,1 blue
+t3 text 1,1 "hello"
+f4 draw 12
 ```
 
 ## The canvas can send you the diagram
