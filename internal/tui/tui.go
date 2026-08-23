@@ -27,6 +27,7 @@ const (
 	phaseEdit
 	phaseAgent
 	phaseHelp
+	phasePalette
 )
 
 type tool int
@@ -126,6 +127,9 @@ type model struct {
 	dismiss func(string) error
 	hidden  func(string) (bool, error)
 	notice  string
+
+	brushColor string
+	brushFill  bool
 }
 
 // Run starts the TUI. Run opens the editor for the composite diagram in cwd.
@@ -272,6 +276,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case phaseHelp:
 			cmd := m.helpKey(msg)
 			return m, cmd
+		case phasePalette:
+			cmd := m.paletteKey(msg)
+			return m, cmd
 		case phaseEdit:
 			if m.typing && bkey.Matches(msg, keyUndo) {
 				m.doUndo()
@@ -289,6 +296,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	case tea.MouseMsg:
+		if m.phase == phasePalette {
+			if click, ok := msg.(tea.MouseClickMsg); ok && click.Y == 1 {
+				m.paletteClick(click.X)
+			}
+			return m, nil
+		}
 		if m.phase != phaseEdit {
 			return m, nil
 		}
@@ -600,6 +613,10 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "1", "2", "3", "4", "5", "6":
 		m.switchTool(toolFor(msg.String()))
+	case "c":
+		m.openPalette()
+	case "f":
+		m.toggleFill()
 	case "delete", "backspace":
 		if m.tool == toolSelect {
 			m.deleteSelected()
@@ -638,6 +655,80 @@ func (m *model) editEsc() {
 		return
 	}
 	m.clearSelection()
+}
+
+func (m *model) openPalette() {
+	m.mouse = false
+	m.anchored = false
+	m.anchor = [2]int{}
+	m.pending = nil
+	m.selAct = selectNone
+	m.panning = false
+	m.phase = phasePalette
+}
+
+func (m *model) paletteKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc", "c":
+		m.phase = phaseEdit
+	case "0":
+		m.pickBrushColor("")
+	case "1", "2", "3", "4", "5", "6", "7", "8":
+		m.pickBrushColor(colorDigit(msg.String()))
+	case "q", "ctrl+c":
+		m.save()
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *model) pickBrushColor(name string) {
+	m.brushColor = name
+	m.phase = phaseEdit
+	if len(m.selected) == 0 {
+		return
+	}
+	cmds := make([]canvas.Command, 0, len(m.selected))
+	for id := range m.selected {
+		cmds = append(cmds, canvas.ColorCmd{ID: id, Color: name})
+	}
+	m.applyMany(cmds)
+}
+
+func (m *model) toggleFill() {
+	var boxIDs []string
+	for id := range m.selected {
+		for i := range m.d.Elements {
+			e := &m.d.Elements[i]
+			if e.ID == id && e.Type == canvas.Box {
+				boxIDs = append(boxIDs, id)
+				break
+			}
+		}
+	}
+	if len(boxIDs) == 0 {
+		m.brushFill = !m.brushFill
+		return
+	}
+	fillAll := false
+	for _, id := range boxIDs {
+		for i := range m.d.Elements {
+			e := &m.d.Elements[i]
+			if e.ID == id && !e.Fill {
+				fillAll = true
+				break
+			}
+		}
+		if fillAll {
+			break
+		}
+	}
+	m.brushFill = fillAll
+	cmds := make([]canvas.Command, len(boxIDs))
+	for i, id := range boxIDs {
+		cmds[i] = canvas.FillCmd{ID: id, Fill: fillAll}
+	}
+	m.applyMany(cmds)
 }
 
 func (m *model) openHelp() {
@@ -771,7 +862,7 @@ func (m *model) mouseRoute(msg tea.MouseMsg) tea.Cmd {
 }
 
 func (m *model) chromeClick(x, y int) tea.Cmd {
-	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
+	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.brushColor, m.brushFill, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
 	hit, ok := ch.hit(x, y, m.width, m.layoutHeight())
 	if !ok || !hit.enabled {
 		return nil
@@ -850,7 +941,7 @@ func (m *model) keyCommit(enter bool) {
 		m.beginNonSelectAction()
 		if enter {
 			if len(m.pending) > 0 {
-				m.apply(canvas.DrawCmd{Cells: m.drawCells()})
+				m.apply(canvas.DrawCmd{Cells: m.drawCells(), Color: m.brushColor})
 			}
 			return
 		}
@@ -918,16 +1009,20 @@ func (m *model) commit() {
 	case toolBox:
 		x1, y1 := min(m.anchor[0], m.cursor[0]), min(m.anchor[1], m.cursor[1])
 		x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
-		m.apply(canvas.BoxCmd{X1: x1, Y1: y1, X2: x2, Y2: y2})
+		m.apply(canvas.BoxCmd{
+			X1: x1, Y1: y1, X2: x2, Y2: y2,
+			Color: m.brushColor, Fill: m.brushFill,
+		})
 	case toolLine, toolArrow:
 		start, end := m.snap(m.anchor), m.snap(m.cursor)
 		m.apply(canvas.LineCmd{
 			X1: start[0], Y1: start[1], X2: end[0], Y2: end[1],
 			Arrow: m.lineArrow(),
+			Color: m.brushColor,
 		})
 	case toolDraw:
 		if len(m.pending) > 0 {
-			m.apply(canvas.DrawCmd{Cells: m.drawCells()})
+			m.apply(canvas.DrawCmd{Cells: m.drawCells(), Color: m.brushColor})
 		}
 	case toolSelect:
 		m.commitSelect()
@@ -935,7 +1030,11 @@ func (m *model) commit() {
 }
 
 func (m model) canvasHeight() int {
-	return max(1, m.height-headerRows-statusRows-m.noticeRows())
+	extra := 0
+	if m.phase == phasePalette {
+		extra = 1
+	}
+	return max(1, m.height-headerRows-statusRows-m.noticeRows()-extra)
 }
 
 // canvasPoint translates a terminal mouse position into a grid coordinate.
@@ -1083,7 +1182,10 @@ func (m *model) commitTyping() {
 	} else if m.editID != "" {
 		m.apply(canvas.TextSetCmd{ID: m.editID, Text: m.textBuf})
 	} else {
-		m.apply(canvas.TextCmd{X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
+		m.apply(canvas.TextCmd{
+			X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf,
+			Color: m.brushColor,
+		})
 	}
 	m.typing = false
 	m.textBuf = ""
@@ -1203,9 +1305,8 @@ func helpLines(width int) []string {
 			"Mouse  drag draw  click select/text",
 			"  double-click edit text  mid-drag pan",
 			"  wheel pan  shift=side  ctrl=same pan",
-			"Keys  arrows  space/enter commit",
-			"  del/backspace delete sel  ctrl+z/y undo",
-			"  s send  o/canvases picker  esc select",
+			"Keys  arrows  space/enter  c color  f fill",
+			"  del/back  ctrl+z/y  s send  o picker  esc",
 			"Send/Picker  ↑↓/jk enter esc  n=new",
 			"esc / ? / h close",
 		}
@@ -1228,6 +1329,7 @@ func helpLines(width int) []string {
 		"  draw           space adds a cell; enter commits",
 		"  text           type · enter commit · esc cancel",
 		"  delete         selected elements · both delete keys",
+		"  c              color palette · f fill brush / selected boxes",
 		"",
 		"View   click canvases (o) to open picker · recenter fits drawing",
 		"Edit   ctrl+z undo · ctrl+y redo · s send · o picker · esc select · q quit",
@@ -1306,15 +1408,20 @@ func (m *model) badge() string {
 }
 
 func (m model) editView() string {
-	g := m.d.Render()
+	elems := m.d.Elements
 	if m.mouse || m.anchored || m.typing || len(m.pending) > 0 || len(m.selected) > 0 {
-		g = m.overlayPreview(g)
+		elems = m.overlayElements()
 	}
-	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
+	painted := (&canvas.Diagram{Elements: elems}).Paint()
+	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.brushColor, m.brushFill, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
 	var b strings.Builder
 	b.WriteString(ch.header)
 	b.WriteString("\n")
-	b.WriteString(m.vp.paint(g, m.width, m.canvasHeight()))
+	if m.phase == phasePalette {
+		b.WriteString(layoutPaletteLine(m.width))
+		b.WriteString("\n")
+	}
+	b.WriteString(m.vp.paintColored(painted, m.width, m.canvasHeight()))
 	b.WriteString("\n")
 	b.WriteString(styleChromeFooter(ch, m.tool, m.hist.canUndo(), m.hist.canRedo()))
 	if line := m.noticeLine(); line != "" {
@@ -1370,7 +1477,7 @@ func (m model) movePreview(elems []canvas.Element, ids map[string]bool) []canvas
 	}
 	if dx != 0 || dy != 0 {
 		for _, e := range grabbed {
-			out = append(out, canvas.Element{Type: canvas.Freeform, Cells: ghostCells(e)})
+			out = append(out, canvas.Element{Type: canvas.Freeform, Cells: ghostCells(e), Color: m.brushColor})
 		}
 	}
 	for _, e := range grabbed {
@@ -1402,23 +1509,35 @@ func (m model) lineArrow() canvas.Arrow {
 	return canvas.ArrowNone
 }
 
-func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
+func (m model) overlayElements() []canvas.Element {
 	elems := make([]canvas.Element, len(m.d.Elements), len(m.d.Elements)+1)
 	copy(elems, m.d.Elements)
+	brush := func(e *canvas.Element) {
+		e.Color = m.brushColor
+		if e.Type == canvas.Box {
+			e.Fill = m.brushFill
+		}
+	}
 	if m.tool == toolDraw && len(m.pending) > 0 {
-		elems = append(elems, canvas.Element{Type: canvas.Freeform, Cells: m.pending})
+		e := canvas.Element{Type: canvas.Freeform, Cells: m.pending}
+		brush(&e)
+		elems = append(elems, e)
 	}
 	if m.tool == toolBox {
 		x1, y1 := min(m.anchor[0], m.cursor[0]), min(m.anchor[1], m.cursor[1])
 		x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
-		elems = append(elems, canvas.Element{Type: canvas.Box, X1: x1, Y1: y1, X2: x2, Y2: y2})
+		e := canvas.Element{Type: canvas.Box, X1: x1, Y1: y1, X2: x2, Y2: y2}
+		brush(&e)
+		elems = append(elems, e)
 	}
 	if m.tool == toolLine || m.tool == toolArrow {
 		start, end := m.snap(m.anchor), m.snap(m.cursor)
-		elems = append(elems, canvas.Element{
+		e := canvas.Element{
 			Type: canvas.Line, X1: start[0], Y1: start[1], X2: end[0], Y2: end[1],
 			Arrow: m.lineArrow(),
-		})
+		}
+		brush(&e)
+		elems = append(elems, e)
 	}
 	if m.tool == toolSelect && m.selAct == selectMove && len(m.selected) > 0 {
 		elems = m.movePreview(elems, m.selected)
@@ -1426,7 +1545,9 @@ func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 	if m.tool == toolSelect && m.selAct == selectMarquee {
 		x1, y1 := min(m.anchor[0], m.cursor[0]), min(m.anchor[1], m.cursor[1])
 		x2, y2 := max(m.anchor[0], m.cursor[0]), max(m.anchor[1], m.cursor[1])
-		elems = append(elems, canvas.Element{Type: canvas.Box, X1: x1, Y1: y1, X2: x2, Y2: y2})
+		e := canvas.Element{Type: canvas.Box, X1: x1, Y1: y1, X2: x2, Y2: y2}
+		brush(&e)
+		elems = append(elems, e)
 	}
 	if len(m.selected) > 0 && m.selAct != selectMove {
 		var marks []canvas.Cell
@@ -1449,13 +1570,14 @@ func (m model) overlayPreview(g canvas.Grid) canvas.Grid {
 			}
 			elems = filtered
 		}
-		elems = append(elems, canvas.Element{Type: canvas.Text, X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf})
+		e := canvas.Element{Type: canvas.Text, X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf}
+		brush(&e)
+		elems = append(elems, e)
 		elems = append(elems, canvas.Element{Type: canvas.Freeform, Cells: []canvas.Cell{{
 			X: m.textPos[0] + len([]rune(m.textBuf)), Y: m.textPos[1], Ch: cursorGlyph,
 		}}})
 	}
-	tmp := canvas.Diagram{Elements: elems}
-	return tmp.Render()
+	return elems
 }
 
 func (m model) statusLine() string {

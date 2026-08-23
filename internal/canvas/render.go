@@ -1,7 +1,9 @@
 package canvas
 
 import (
+	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -218,11 +220,72 @@ func abs(n int) int {
 	return n
 }
 
-// Export renders a diagram to compact grid text that an LLM or a person can
-// read. The text is the bounding rectangle of the grid. Export removes the
-// trailing spaces of each line.
+// Export renders a diagram to compact grid text plus a legend. The picture is
+// character-only; color and fill appear only in the legend lines.
 func Export(d *Diagram) string {
-	return d.Render().String()
+	pic := d.Render().String()
+	if len(d.Elements) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(pic)
+	sb.WriteByte('\n')
+	for i, e := range d.Elements {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(legendLine(e))
+	}
+	return sb.String()
+}
+
+func legendLine(e Element) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s %s", e.ID, legendKind(e), legendGeom(e))
+	if e.Color != "" {
+		b.WriteByte(' ')
+		b.WriteString(e.Color)
+	}
+	if e.Fill {
+		b.WriteString(" fill")
+	}
+	switch e.Type {
+	case Box:
+		if e.Label != "" {
+			fmt.Fprintf(&b, " %q", e.Label)
+		}
+	case Text:
+		fmt.Fprintf(&b, " %q", e.Text)
+	}
+	return b.String()
+}
+
+func legendKind(e Element) string {
+	switch e.Type {
+	case Box:
+		return "box"
+	case Line:
+		return "line"
+	case Text:
+		return "text"
+	case Freeform:
+		return "draw"
+	default:
+		return string(e.Type)
+	}
+}
+
+func legendGeom(e Element) string {
+	switch e.Type {
+	case Box, Line:
+		return fmt.Sprintf("%d,%d-%d,%d", e.X1, e.Y1, e.X2, e.Y2)
+	case Text:
+		return fmt.Sprintf("%d,%d", e.X, e.Y)
+	case Freeform:
+		return strconv.Itoa(len(e.Cells))
+	default:
+		return ""
+	}
 }
 
 // Window renders the w by h block of cells whose top-left cell is (x0, y0).

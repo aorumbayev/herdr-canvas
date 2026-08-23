@@ -41,11 +41,14 @@ type chipSpec struct {
 	group   int
 }
 
-func layoutChrome(width int, name string, cursor [2]int, active tool, canUndo, canRedo bool, badge string) chrome {
+func layoutChrome(width int, name string, cursor [2]int, brushColor string, brushFill bool, active tool, canUndo, canRedo bool, badge string) chrome {
 	if width < 1 {
 		width = 1
 	}
 	right := fmt.Sprintf("canvases  recenter  (%d,%d)", cursor[0], cursor[1])
+	if suffix := brushHeaderSuffix(brushColor, brushFill); suffix != "" {
+		right = fmt.Sprintf("canvases  recenter  (%d,%d) %s", cursor[0], cursor[1], suffix)
+	}
 	left := name
 	leftW := len([]rune(left))
 	rightW := len([]rune(right))

@@ -62,6 +62,8 @@ func newRootCmd() *cobra.Command {
 		moveCmd(),
 		deleteCmd(),
 		labelCmd(),
+		colorCmd(),
+		fillCmd(),
 		launchCmd(),
 		setupCmd(),
 		updateCmd(),
@@ -139,7 +141,7 @@ func skillCmd() *cobra.Command {
 }
 
 func boxCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "box <x1> <y1> <x2> <y2> [label]",
 		Short: "Add a box (two corners) with an optional label",
 		Args:  cobra.MinimumNArgs(4),
@@ -148,9 +150,18 @@ func boxCmd() *cobra.Command {
 			if err != nil {
 				return nil, err
 			}
-			return canvas.BoxCmd{X1: n[0], Y1: n[1], X2: n[2], Y2: n[3], Label: strings.Join(a[4:], " ")}, nil
+			fill, _ := cmd.Flags().GetBool("fill")
+			return canvas.BoxCmd{
+				X1: n[0], Y1: n[1], X2: n[2], Y2: n[3],
+				Label: strings.Join(a[4:], " "),
+				Color: flagString(cmd, "color"),
+				Fill:  fill,
+			}, nil
 		}),
 	}
+	c.Flags().String("color", "", "foreground color: red|green|yellow|blue|magenta|cyan|white|black|default")
+	c.Flags().Bool("fill", false, "paint the box interior")
+	return c
 }
 
 func lineCmd() *cobra.Command {
@@ -167,15 +178,20 @@ func lineCmd() *cobra.Command {
 			if err != nil {
 				return nil, err
 			}
-			return canvas.LineCmd{X1: n[0], Y1: n[1], X2: n[2], Y2: n[3], Arrow: arr}, nil
+			return canvas.LineCmd{
+				X1: n[0], Y1: n[1], X2: n[2], Y2: n[3],
+				Arrow: arr,
+				Color: flagString(cmd, "color"),
+			}, nil
 		}),
 	}
 	c.Flags().String("arrow", string(canvas.ArrowNone), "arrow placement: none|start|end|both")
+	c.Flags().String("color", "", "foreground color: red|green|yellow|blue|magenta|cyan|white|black|default")
 	return c
 }
 
 func textCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "text <x> <y> <text>",
 		Short: "Place a text string at a coordinate",
 		Args:  cobra.MinimumNArgs(3),
@@ -184,13 +200,18 @@ func textCmd() *cobra.Command {
 			if err != nil {
 				return nil, err
 			}
-			return canvas.TextCmd{X: n[0], Y: n[1], Text: strings.Join(a[2:], " ")}, nil
+			return canvas.TextCmd{
+				X: n[0], Y: n[1], Text: strings.Join(a[2:], " "),
+				Color: flagString(cmd, "color"),
+			}, nil
 		}),
 	}
+	c.Flags().String("color", "", "foreground color: red|green|yellow|blue|magenta|cyan|white|black|default")
+	return c
 }
 
 func drawCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "draw <x> <y> <ch> [<x> <y> <ch> ...]",
 		Short: "Set freeform cells (x y char triples)",
 		Args:  cobra.MinimumNArgs(3),
@@ -210,9 +231,11 @@ func drawCmd() *cobra.Command {
 				}
 				cells = append(cells, canvas.Cell{X: x, Y: y, Ch: a[i+2]})
 			}
-			return canvas.DrawCmd{Cells: cells}, nil
+			return canvas.DrawCmd{Cells: cells, Color: flagString(cmd, "color")}, nil
 		}),
 	}
+	c.Flags().String("color", "", "foreground color: red|green|yellow|blue|magenta|cyan|white|black|default")
+	return c
 }
 
 func moveCmd() *cobra.Command {
@@ -252,6 +275,43 @@ func labelCmd() *cobra.Command {
 		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
 			return canvas.LabelCmd{ID: a[0], Label: strings.Join(a[1:], " ")}, nil
 		}),
+	}
+}
+
+func colorCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "color <id> <name>",
+		Short: "Set an element's foreground color",
+		Args:  cobra.ExactArgs(2),
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
+			return canvas.ColorCmd{ID: a[0], Color: a[1]}, nil
+		}),
+	}
+}
+
+func fillCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "fill <id> <on|off>",
+		Short: "Fill or unfill a box interior",
+		Args:  cobra.ExactArgs(2),
+		RunE: runElement(func(cmd *cobra.Command, a []string) (canvas.Command, error) {
+			on, err := onOff(a[1])
+			if err != nil {
+				return nil, err
+			}
+			return canvas.FillCmd{ID: a[0], Fill: on}, nil
+		}),
+	}
+}
+
+func onOff(s string) (bool, error) {
+	switch s {
+	case "on":
+		return true, nil
+	case "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("fill state %q (want on|off)", s)
 	}
 }
 

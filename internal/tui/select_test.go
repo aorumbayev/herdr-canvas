@@ -308,11 +308,11 @@ func TestSelectHighlightsCorners(t *testing.T) {
 }
 
 func TestChromeHasSelChip(t *testing.T) {
-	ch := layoutChrome(80, "demo", [2]int{0, 0}, toolSelect, true, true, "")
+	ch := layoutChrome(80, "demo", [2]int{0, 0}, "", false, toolSelect, true, true, "")
 	if indexOf(ch.footer, "[1 sel]") < 0 {
 		t.Fatalf("footer %q missing active sel chip", ch.footer)
 	}
-	short := layoutChrome(20, "demo", [2]int{0, 0}, toolSelect, false, false, "")
+	short := layoutChrome(20, "demo", [2]int{0, 0}, "", false, toolSelect, false, false, "")
 	if indexOf(short.footer, "[1]") < 0 && indexOf(short.footer, "1") < 0 {
 		t.Fatalf("short footer %q missing 1/sel", short.footer)
 	}

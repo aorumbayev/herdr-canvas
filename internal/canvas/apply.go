@@ -5,11 +5,30 @@ import (
 	"strconv"
 )
 
+var validColors = map[string]struct{}{
+	"red": {}, "green": {}, "yellow": {}, "blue": {},
+	"magenta": {}, "cyan": {}, "white": {}, "black": {},
+}
+
+func parseColor(s string) (string, error) {
+	if s == "" || s == "default" {
+		return "", nil
+	}
+	if _, ok := validColors[s]; ok {
+		return s, nil
+	}
+	return "", fmt.Errorf("unknown color name %q", s)
+}
+
 // Apply validates a command against the diagram. Apply then commits the
 // command, or returns an error that names the id and the rule.
 func (d *Diagram) Apply(cmd Command) error {
 	switch c := cmd.(type) {
 	case BoxCmd:
+		color, err := parseColor(c.Color)
+		if err != nil {
+			return fmt.Errorf("box: color %q: %w", c.Color, err)
+		}
 		if err := validateCorners(c.X1, c.Y1, c.X2, c.Y2); err != nil {
 			return fmt.Errorf("box: %w", err)
 		}
@@ -21,8 +40,14 @@ func (d *Diagram) Apply(cmd Command) error {
 			X2:    c.X2,
 			Y2:    c.Y2,
 			Label: c.Label,
+			Color: color,
+			Fill:  c.Fill,
 		})
 	case LineCmd:
+		color, err := parseColor(c.Color)
+		if err != nil {
+			return fmt.Errorf("line: color %q: %w", c.Color, err)
+		}
 		if err := validateEndpoints(c.X1, c.Y1, c.X2, c.Y2); err != nil {
 			return fmt.Errorf("line: %w", err)
 		}
@@ -34,8 +59,13 @@ func (d *Diagram) Apply(cmd Command) error {
 			X2:    c.X2,
 			Y2:    c.Y2,
 			Arrow: c.Arrow,
+			Color: color,
 		})
 	case TextCmd:
+		color, err := parseColor(c.Color)
+		if err != nil {
+			return fmt.Errorf("text: color %q: %w", c.Color, err)
+		}
 		if c.X < 0 || c.Y < 0 {
 			return fmt.Errorf("text: coordinates must be non-negative, got (%d,%d)", c.X, c.Y)
 		}
@@ -43,13 +73,18 @@ func (d *Diagram) Apply(cmd Command) error {
 			return fmt.Errorf("text: text must be non-empty")
 		}
 		d.Elements = append(d.Elements, Element{
-			ID:   d.nextID("t"),
-			Type: Text,
-			X:    c.X,
-			Y:    c.Y,
-			Text: c.Text,
+			ID:    d.nextID("t"),
+			Type:  Text,
+			X:     c.X,
+			Y:     c.Y,
+			Text:  c.Text,
+			Color: color,
 		})
 	case DrawCmd:
+		color, err := parseColor(c.Color)
+		if err != nil {
+			return fmt.Errorf("draw: color %q: %w", c.Color, err)
+		}
 		if len(c.Cells) == 0 {
 			return fmt.Errorf("draw: cell list must be non-empty")
 		}
@@ -62,6 +97,7 @@ func (d *Diagram) Apply(cmd Command) error {
 			ID:    d.nextID("f"),
 			Type:  Freeform,
 			Cells: c.Cells,
+			Color: color,
 		})
 	case MoveCmd:
 		e, err := d.find(c.ID)
@@ -101,6 +137,25 @@ func (d *Diagram) Apply(cmd Command) error {
 			return fmt.Errorf("textset %s: text must be non-empty", c.ID)
 		}
 		e.Text = c.Text
+	case ColorCmd:
+		color, err := parseColor(c.Color)
+		if err != nil {
+			return fmt.Errorf("color %q: %w", c.Color, err)
+		}
+		e, err := d.find(c.ID)
+		if err != nil {
+			return err
+		}
+		e.Color = color
+	case FillCmd:
+		e, err := d.find(c.ID)
+		if err != nil {
+			return err
+		}
+		if e.Type != Box {
+			return fmt.Errorf("fill %s: not a box", c.ID)
+		}
+		e.Fill = c.Fill
 	default:
 		return fmt.Errorf("unsupported command %T", cmd)
 	}

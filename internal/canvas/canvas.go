@@ -47,6 +47,8 @@ type Element struct {
 	Text  string `json:"text,omitempty"`
 	Arrow Arrow  `json:"arrow,omitempty"`
 	Cells []Cell `json:"cells,omitempty"`
+	Color string `json:"color,omitempty"`
+	Fill  bool   `json:"fill,omitempty"`
 }
 
 // Diagram is the aggregate root. A Diagram is a named set of Elements. Later
