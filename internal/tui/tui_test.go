@@ -72,6 +72,8 @@ func ctrlShiftZ() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl | tea.ModShift}
 }
 
+func ctrlJ() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl} }
+
 func shiftEnter() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift}
 }
@@ -676,7 +678,7 @@ func TestTextRendersAtTheClickedCellWhileTyping(t *testing.T) {
 	if want := "   hi" + cursorGlyph; row != want {
 		t.Errorf("row = %q, want %q", row, want)
 	}
-	if got, want := m.statusLine(), "[text] @(3,1) · shift+enter newline · enter commit · esc cancel"; got != want {
+	if got, want := m.statusLine(), "[text] @(3,1) · shift+enter or ctrl+j newline · enter commit · esc cancel"; got != want {
 		t.Errorf("status = %q, want %q (buffer stays on the canvas)", got, want)
 	}
 
@@ -743,6 +745,15 @@ func TestClickOnSecondTextLineStaysTyping(t *testing.T) {
 	}
 	if m.textBuf != "hi\ny" {
 		t.Fatalf("textBuf = %q", m.textBuf)
+	}
+}
+
+func TestCtrlJInsertsNewlineWhileTyping(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("a"), ctrlJ(), key("b"))
+	if m.textBuf != "a\nb" {
+		t.Fatalf("textBuf = %q, want a\\nb", m.textBuf)
 	}
 }
 

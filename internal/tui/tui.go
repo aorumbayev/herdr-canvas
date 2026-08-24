@@ -541,7 +541,7 @@ func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
-	if msg.Code == tea.KeyEnter && msg.Mod.Contains(tea.ModShift) {
+	if textNewlineKey(msg) {
 		m.textBuf += "\n"
 		m.ensureTextCaretVisible()
 		return nil
@@ -568,6 +568,17 @@ func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.ensureTextCaretVisible()
 	}
 	return nil
+}
+
+func textNewlineKey(msg tea.KeyPressMsg) bool {
+	switch msg.String() {
+	case "shift+enter", "ctrl+enter", "alt+enter", "ctrl+j":
+		return true
+	}
+	if !msg.Mod.Contains(tea.ModShift) {
+		return false
+	}
+	return msg.Code == tea.KeyEnter || msg.Code == tea.KeyKpEnter
 }
 
 // acceptPaste inserts clipboard/bracketed-paste text into the active text
@@ -1608,7 +1619,7 @@ func (m model) overlayElements() []canvas.Element {
 
 func (m model) statusLine() string {
 	if m.typing {
-		return fmt.Sprintf("[text] @(%d,%d) · shift+enter newline · enter commit · esc cancel", m.textPos[0], m.textPos[1])
+		return fmt.Sprintf("[text] @(%d,%d) · shift+enter or ctrl+j newline · enter commit · esc cancel", m.textPos[0], m.textPos[1])
 	}
 	if m.status != "" {
 		return m.status
