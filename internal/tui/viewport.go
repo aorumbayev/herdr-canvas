@@ -55,9 +55,9 @@ func elementBBox(elems []canvas.Element) (minX, minY, maxX, maxY int, ok bool) {
 			touch(e.X1, e.Y1)
 			touch(e.X2, e.Y2)
 		case canvas.Text:
-			touch(e.X, e.Y)
-			if n := len([]rune(e.Text)); n > 0 {
-				touch(e.X+n-1, e.Y)
+			if x1, y1, x2, y2, ok := e.Bounds(); ok {
+				touch(x1, y1)
+				touch(x2, y2)
 			}
 		case canvas.Freeform:
 			for _, c := range e.Cells {

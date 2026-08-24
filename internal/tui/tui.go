@@ -541,6 +541,10 @@ func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
+	if msg.Code == tea.KeyEnter && msg.Mod.Contains(tea.ModShift) {
+		m.textBuf += "\n"
+		return nil
+	}
 	switch msg.String() {
 	case "enter":
 		m.commitTyping()
@@ -563,8 +567,8 @@ func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // acceptPaste inserts clipboard/bracketed-paste text into the active text
-// field. Text elements are a single string on one row, so newlines become
-// spaces. Paste is ignored when not naming or typing.
+// field. Newlines become spaces so a paste does not jump the caret. Paste is
+// ignored when not naming or typing.
 func (m *model) acceptPaste(content string) {
 	text := flattenPaste(content)
 	if text == "" {
@@ -1146,8 +1150,16 @@ func (m model) inTextBuffer(p [2]int) bool {
 	if !m.typing {
 		return false
 	}
-	n := len([]rune(m.textBuf))
-	return p[1] == m.textPos[1] && p[0] >= m.textPos[0] && p[0] <= m.textPos[0]+n
+	cells, endX, endY := canvas.PlaceText(m.textPos[0], m.textPos[1], m.textBuf)
+	if p[0] == endX && p[1] == endY {
+		return true
+	}
+	for _, c := range cells {
+		if c.X == p[0] && c.Y == p[1] {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *model) isDoubleClick(p [2]int) bool {
@@ -1327,7 +1339,7 @@ func helpLines(width int) []string {
 		"  arrows         move cursor",
 		"  space / enter  anchor, then commit",
 		"  draw           space adds a cell; enter commits",
-		"  text           type · enter commit · esc cancel",
+		"  text           type · shift+enter newline · enter commit · esc cancel",
 		"  delete         selected elements · both delete keys",
 		"  c              color palette · f fill brush / selected boxes",
 		"",
@@ -1573,8 +1585,9 @@ func (m model) overlayElements() []canvas.Element {
 		e := canvas.Element{Type: canvas.Text, X: m.textPos[0], Y: m.textPos[1], Text: m.textBuf}
 		brush(&e)
 		elems = append(elems, e)
+		_, cx, cy := canvas.PlaceText(m.textPos[0], m.textPos[1], m.textBuf)
 		elems = append(elems, canvas.Element{Type: canvas.Freeform, Cells: []canvas.Cell{{
-			X: m.textPos[0] + len([]rune(m.textBuf)), Y: m.textPos[1], Ch: cursorGlyph,
+			X: cx, Y: cy, Ch: cursorGlyph,
 		}}})
 	}
 	return elems
@@ -1582,7 +1595,7 @@ func (m model) overlayElements() []canvas.Element {
 
 func (m model) statusLine() string {
 	if m.typing {
-		return fmt.Sprintf("[text] @(%d,%d) · enter commit · esc cancel", m.textPos[0], m.textPos[1])
+		return fmt.Sprintf("[text] @(%d,%d) · shift+enter newline · enter commit · esc cancel", m.textPos[0], m.textPos[1])
 	}
 	if m.status != "" {
 		return m.status

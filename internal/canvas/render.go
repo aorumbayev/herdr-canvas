@@ -38,8 +38,11 @@ func (d *Diagram) Render() Grid {
 		case Line:
 			drawLine(g, e)
 		case Text:
-			for i, r := range []rune(e.Text) {
-				g[[2]int{e.X + i, e.Y}] = r
+			cells, _, _ := PlaceText(e.X, e.Y, e.Text)
+			for _, c := range cells {
+				if r := []rune(c.Ch); len(r) > 0 {
+					g[[2]int{c.X, c.Y}] = r[0]
+				}
 			}
 		case Freeform:
 			for _, c := range e.Cells {

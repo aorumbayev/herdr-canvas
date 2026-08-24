@@ -2,184 +2,66 @@
   herdr-canvas
 </h3>
 
-<p align="center">Draw ASCII diagrams in your terminal. Let your agent read and edit them.</p>
+<p align="center">herdr-canvas makes ASCII diagrams in the terminal. A herdr agent can read the diagrams and change the diagrams.</p>
 
 <p align="center">
-  <img src="docs/assets/canvas.svg" alt="herdr split: draw on the canvas, send to the agent, the agent adds a box" width="1180" />
+  <img src="docs/assets/canvas.svg" alt="herdr split: a diagram on the canvas, send to the herdr agent, the herdr agent adds a box" width="1180" />
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> · <a href="#draw-your-first-diagram">First diagram</a> · <a href="#let-your-agent-edit-the-diagram">Agents</a>
+  <a href="#install">Install</a> · <a href="#use">Use</a> · <a href="#herdr-agents">herdr agents</a>
 </p>
 
 ---
 
-You sketch a box-and-arrow picture to explain a system. You draw it on a
-whiteboard, or in a web app, and then it is not in your repository and your
-agent cannot read it. herdr-canvas is [asciiflow](https://asciiflow.com) as a
-terminal program: you draw with the mouse, the diagram is one JSON file, and an
-agent reads and edits the same file through a small command set.
+herdr-canvas is a herdr plugin. herdr-canvas is also a binary. There is one JSON file for each diagram. herdr-canvas makes the picture from the JSON file.
 
-It is a plugin for [herdr](https://herdr.dev), and it also runs as a standalone
-binary.
-
-A diagram holds four kinds of element:
-
-| Element    | What it is                                            |
-| ---------- | ----------------------------------------------------- |
-| `box`      | A rectangle with an optional label                    |
-| `line`     | An orthogonal connector with an optional arrow at either end |
-| `text`     | A string at one coordinate                            |
-| `draw`     | Freeform cells — the pencil                           |
-
-Every element has a stable id (`b1`, `l2`, `t3`, `f4`). The tool never reuses
-an id. The picture you see is a pure function of the elements, so the JSON file
-is the only source of truth.
+The element types are `box`, `line`, `text`, and `draw`. Each element has an identifier (`b1`, `l2`, `t3`, `f4`). herdr-canvas does not use an identifier again.
 
 ## Install
 
-Linux and macOS. Native Windows is not supported: install herdr and this
-plugin inside **WSL2**, and use the matching Linux archive.
+herdr-canvas operates on Linux and on macOS. If you use Windows, use **WSL2** and a `Linux_*` archive.
 
-[GitHub Releases](https://github.com/aorumbayev/herdr-canvas/releases) publish
-four archives plus `checksums.txt`:
-
-| Machine | Archive |
-| --- | --- |
-| macOS amd64 | `herdr-canvas_Darwin_x86_64.tar.gz` |
-| macOS arm64 | `herdr-canvas_Darwin_arm64.tar.gz` |
-| Linux amd64 | `herdr-canvas_Linux_x86_64.tar.gz` |
-| Linux arm64 | `herdr-canvas_Linux_arm64.tar.gz` |
-
-You do not need a Go toolchain to install or update.
-
-### Herdr plugin
-
-You need [herdr](https://herdr.dev) 0.8.2 or later, git, and either curl or
-wget. You do not need Go.
+herdr 0.8.2 or a subsequent version is necessary. git is necessary. curl or wget is necessary. Go is not necessary.
 
 ```bash
 herdr plugin install aorumbayev/herdr-canvas
 ```
 
-herdr clones the plugin, downloads the Release archive for the version in
-`herdr-plugin.toml` (not `/releases/latest`), checks the checksum, and runs
-`setup`. `herdr-canvas --version` prints that version as `0.x.y`.
+Or put `herdr-canvas` from [Releases](https://github.com/aorumbayev/herdr-canvas/releases) on `PATH`.
 
-`v0.1.0` is notes only and has no archives, so a default-ref install stays
-broken until the next tagged release is published.
+The `setup` command writes `prefix+d` one time to `~/.config/herdr/config.toml`. If you uninstall the plugin, that command does not remove `prefix+d`. herdr uses `prefix+c` for a new tab.
 
-### Standalone archive
+The `herdr-canvas update` command installs a subsequent tag from GitHub. If herdr installed the herdr-canvas plugin, use `herdr plugin install`. If the version is `dev`, herdr-canvas does not install an update. If the TUI shows that there is a new version, push `i`. The TUI then does not show that indication. The `i` key does not install the update.
 
-Download the archive for your OS and CPU from
-[GitHub Releases](https://github.com/aorumbayev/herdr-canvas/releases). Unpack
-`herdr-canvas` onto your `PATH`. After the download you do not need git, curl,
-or wget. On WSL2, use a `Linux_*` archive.
+## Use
 
-> [!IMPORTANT]
-> The install writes one hotkey binding into your shared
-> `~/.config/herdr/config.toml`. herdr uses `prefix+c` for a new tab, so this
-> plugin uses `prefix+d`. The install writes the binding once. The uninstall
-> does not remove it.
+Push `prefix+d` to open the canvas or to close the canvas. If you are in a git repository, herdr-canvas opens the diagram for that repository and that branch. If you are not in a git repository, select a name or make a name.
 
-### Updates
+| Key | Step |
+| --- | --- |
+| `1`–`6` | Select the tool: select, box, line, arrow, text, or draw. |
+| drag | Make a shape. If the tool is select, select a rectangle or move the selection. |
+| click | Select one item. If you push shift and click, add the item or remove the item. |
+| double-click | Change the text. |
+| shift+enter | Start a new line of text. Push enter to record the text. |
+| wheel / middle-drag | Move the view. If you push shift, move the view to the side. |
+| arrows · space/enter | Move the cursor. Push space or enter to attach the shape. Then record the shape. |
+| `c` / `f` | Open the color list. Set the `fill` of a box. |
+| `s` | Send the diagram to the herdr agent. |
+| `o` | Open the diagram list. |
+| `?` / `h` | Show the controls. |
+| delete/backspace | Erase the selection (one undo step). |
+| `esc` | Cancel the action. Then select the select tool. Then remove the selection. |
+| `q` | Stop herdr-canvas. |
 
-`herdr-canvas update` installs a newer published (non-draft) tag. A
-herdr-managed install goes through `herdr plugin install`. A standalone binary
-replaces itself from Release assets.
+herdr-canvas keeps each change immediately. Push Recenter to put the diagram in the view. If you erase a diagram in the list, herdr-canvas tells you to push `y` or `N`. You cannot cancel that erase.
 
-A development build (`herdr-canvas --version` prints `dev`, or anything other
-than `0.x.y`) refuses update, does not contact GitHub, and does not show a TUI
-notice. Install from a GitHub Release or `herdr plugin install` instead.
+## herdr agents
 
-On a release binary, the canvas can show
-`newer 0.2.0 · herdr-canvas update · i dismiss`. Press `i` to hide that tag
-until a newer one exists. `i` does not apply the update. While you name a
-diagram or type on the canvas, `i` still inserts.
+Push `s`. herdr-canvas writes `export` and `skill` to the input of the herdr agent. herdr-canvas does not send the input. If there is more than one herdr agent, select a herdr agent from the list.
 
-## Draw your first diagram
-
-Press `prefix+d`. herdr opens the canvas in a split beside the active pane.
-Press `prefix+d` again to close it. When you are inside a git repository, the
-canvas opens the diagram named for that repository and branch, for example
-`herdr-canvas@main`. When you are not, a picker lists your diagrams and offers
-to create one.
-
-Pick a tool with a number key (or the footer chips), then drag with the left
-mouse button. Select is the default when a canvas opens.
-
-| Key | Tool             |
-| --- | ---------------- |
-| `1` | Select           |
-| `2` | Box              |
-| `3` | Line             |
-| `4` | Arrow            |
-| `5` | Text             |
-| `6` | Draw (freeform)  |
-| `c` | Color palette    |
-| `f` | Fill toggle      |
-| `s` | Send to agent    |
-| `o` / `canvases` header control | Diagram picker |
-| `?` / `h` / help chip | Help (controls) |
-| `esc` | Cancel, then Select, then clear selection |
-| `q` | Quit             |
-
-The canvas draws at 1×. The wheel pans (shift pans sideways; ctrl pans the
-same way). Middle-drag pans. Recenter fits the drawing in the view.
-
-In Select, click replaces the selection, shift-click toggles membership, and
-a drag on empty space marquees. Shift-marquee adds. Drag a selected element
-to move the whole selection. Delete and Backspace remove the selection as
-one undo step. `x` never deletes and never changes tools.
-
-Press `o` to leave the drawing for the list of your diagrams, and `esc` to
-go back to it. The list reads the store each time, so a diagram your agent
-made while you drew is in it. In the picker, Delete or Backspace asks
-`delete "name"? y/N` before removing a diagram. Canvas deletion is not an
-undo step.
-
-A line and an arrow run on one axis, then on the other axis. The bend gets a
-corner glyph. An arrow gets one arrowhead at its end. Boxes and lines use one
-Unicode box-drawing set (`┌ ─ ┐ │ └ ┘ ┼ ►`), so an edge and a junction join
-without a change of style.
-
-The arrow keys move a cursor, and space or enter anchors and commits, so you
-can draw the same shapes without a mouse. Every change saves at once, so the
-canvas has no save key.
-
-## Send the diagram to the agent beside you
-
-Press `s`. The canvas writes two commands into the agent's input: `export` of
-the open diagram, and `skill` (skip `skill` if the agent already ran it in
-this session). It does not paste the picture and it does not press enter.
-herdr focuses the agent pane, you add what you want done, and you submit it.
-Nothing reaches the agent until you do.
-
-One agent in the workspace receives the diagram at once. When the workspace
-holds more than one agent, the canvas lists them and you choose:
-
-```
-send herdr-canvas@main to which agent?   workspace: herdr-canvas
-
-> control       claude    idle     Editable grid validation and mouse bugs
-  review-prose  claude    idle     Herdr-canvas prose review
-  ship          claude    working  herdr canvas pull request ship stage
-
-↑/↓ choose · enter send · esc cancel
-```
-
-Each row names the tab the way your tab bar names it, then the agent, its
-state, and its terminal title.
-
-You keep drawing while the agent works. The canvas looks at the file about
-twice a second and reloads it when the agent changes it, so the picture updates
-under your eyes. It waits while you hold a drag, type text, or hold a keyboard
-anchor, so a reload never moves the ground you draw on.
-
-## Let your agent edit the diagram
-
-Diagrams live in `~/.local/share/herdr-canvas/`, outside your repository. The
-agent reads a diagram as text and changes it one element at a time:
+The diagrams are in `~/.local/share/herdr-canvas/`.
 
 ```bash
 herdr-canvas list
@@ -187,70 +69,28 @@ herdr-canvas --name mydiagram export
 herdr-canvas --name mydiagram box 2 1 20 6 "web server"
 herdr-canvas --name mydiagram line 20 3 34 3 --arrow end
 herdr-canvas --name mydiagram delete b1
-```
-
-Every command goes through one validation gate, on the terminal and in the
-command line alike. The gate rejects a command that names an element that does
-not exist, and a command with impossible geometry. It reports the id and the
-rule that failed. It allows everything else: nested boxes, crossing lines, and
-lines that connect to nothing.
-
-The tool ships its own agent instructions:
-
-```bash
 herdr-canvas skill
 ```
 
-Or paste this to your agent:
+The `--name` alternative selects a diagram. The `--create` alternative makes a diagram that is missing. If you do not set `--name`, the name is the name of the git repository.
 
-```
-Read the herdr-canvas instructions with `herdr-canvas skill` and follow them.
-Then run `herdr-canvas list`, open the diagram for this repository with
-`export`, and describe what it shows.
-```
+| Command | Function |
+| --- | --- |
+| `herdr-canvas` | Opens the TUI |
+| `new` / `open` / `list` | Makes a diagram, opens a diagram, or shows the names of the diagrams |
+| `export` | Shows the picture and the legend |
+| `box` `line` `text` `draw` | Adds an element (`--color`, box `--fill`) |
+| `move` `delete` `label` `color` `fill` | Changes an element |
+| `skill` / `setup` / `update` / `--version` | Shows the instructions, writes the hotkey, installs a tag, or shows the version |
 
-## Commands
-
-| Command                          | What it is for                                  |
-| -------------------------------- | ----------------------------------------------- |
-| `herdr-canvas`                    | Open the canvas                                 |
-| `herdr-canvas new <name>`         | Create a diagram                                |
-| `herdr-canvas open <name>`        | Open a diagram by name                          |
-| `herdr-canvas list`               | List every diagram in the store                 |
-| `herdr-canvas export`             | Print the diagram as text with a legend       |
-| `herdr-canvas box\|line\|text\|draw` | Add an element (`--color`, box `--fill`)   |
-| `herdr-canvas move\|delete\|label`  | Change an element                            |
-| `herdr-canvas color\|fill`          | Set an element's color or box fill            |
-| `herdr-canvas skill`              | Print the agent instructions                    |
-| `herdr-canvas setup`              | Install the herdr hotkey                        |
-| `herdr-canvas update`             | Install a newer published release               |
-| `herdr-canvas --version`          | Print the binary version (`0.x.y` or `dev`)     |
-
-Element commands read the diagram for the current repository. Pass `--name` to
-choose another one, and `--create` to create a diagram that does not exist yet.
-
-## Development
-
-After cloning, install the repository hooks and run the tests:
+## Tests
 
 ```sh
 make setup
 go test ./...
 ```
 
-The commit-message hook and CI reject AI attribution trailers.
-
-## Releases
-
-Releases follow [Conventional Commits](https://www.conventionalcommits.org).
-A `feat` commit raises the minor version and a `fix` commit raises the patch
-version. The major version stays at 0, so a breaking change also raises the
-minor version.
-
-A maintainer starts a release by hand from the `release` workflow
-(`workflow_dispatch`). `v0.1.0` stays notes-only; binaries begin at the next
-tagged version. A failed run may resume only an in-flight **draft** of that
-new version. A published release is never edited.
+The commit-message hook and the CI reject AI attribution trailers. Releases use Conventional Commits. A `feat` commit increases the minor version. A `fix` commit increases the patch version. The major version stays at 0. To start a release, use `workflow_dispatch` on the `release` workflow. A release tag on GitHub stays as it is after the release is complete.
 
 ## License
 

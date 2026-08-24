@@ -72,6 +72,10 @@ func ctrlShiftZ() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl | tea.ModShift}
 }
 
+func shiftEnter() tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift}
+}
+
 func leftDown(x, y int) tea.MouseClickMsg {
 	return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}
 }
@@ -672,8 +676,8 @@ func TestTextRendersAtTheClickedCellWhileTyping(t *testing.T) {
 	if want := "   hi" + cursorGlyph; row != want {
 		t.Errorf("row = %q, want %q", row, want)
 	}
-	if strings.Contains(m.statusLine(), "hi") {
-		t.Errorf("the buffer is still echoed in the status line: %q", m.statusLine())
+	if got, want := m.statusLine(), "[text] @(3,1) · shift+enter newline · enter commit · esc cancel"; got != want {
+		t.Errorf("status = %q, want %q (buffer stays on the canvas)", got, want)
 	}
 
 	m = send(t, m, key("enter"))
@@ -682,6 +686,63 @@ func TestTextRendersAtTheClickedCellWhileTyping(t *testing.T) {
 	}
 	if got := canvasLine(t, m, 1); got != "   hi" {
 		t.Errorf("committed row = %q, want %q", got, "   hi")
+	}
+}
+
+func TestShiftEnterInsertsNewlineThenEnterCommits(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("h"), key("i"), shiftEnter(), key("y"), key("o"))
+
+	if len(m.d.Elements) != 0 {
+		t.Fatalf("shift+enter committed early: %+v", m.d.Elements)
+	}
+	if m.textBuf != "hi\nyo" {
+		t.Fatalf("textBuf = %q, want hi\\nyo", m.textBuf)
+	}
+	if got, want := canvasLine(t, m, 1), "   hi"; got != want {
+		t.Errorf("row 1 = %q, want %q", got, want)
+	}
+	if got, want := canvasLine(t, m, 2), "   yo"+cursorGlyph; got != want {
+		t.Errorf("row 2 = %q, want %q", got, want)
+	}
+
+	m = send(t, m, key("enter"))
+	if m.typing {
+		t.Fatal("still typing after enter")
+	}
+	if len(m.d.Elements) != 1 || m.d.Elements[0].Text != "hi\nyo" {
+		t.Fatalf("enter did not commit multiline text: %+v", m.d.Elements)
+	}
+	if got := canvasLine(t, m, 1); got != "   hi" {
+		t.Errorf("committed row 1 = %q", got)
+	}
+	if got := canvasLine(t, m, 2); got != "   yo" {
+		t.Errorf("committed row 2 = %q", got)
+	}
+}
+
+func TestShiftEnterThenBackspaceRemovesTheBreak(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("a"), shiftEnter(), key("backspace"), key("b"))
+	if m.textBuf != "ab" {
+		t.Fatalf("textBuf = %q, want ab", m.textBuf)
+	}
+	if got, want := canvasLine(t, m, 1), "   ab"+cursorGlyph; got != want {
+		t.Errorf("row = %q, want %q", got, want)
+	}
+}
+
+func TestClickOnSecondTextLineStaysTyping(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(3, 2), key("h"), key("i"), shiftEnter(), key("y"), leftDown(3, 3))
+	if !m.typing {
+		t.Fatal("click on second line committed")
+	}
+	if m.textBuf != "hi\ny" {
+		t.Fatalf("textBuf = %q", m.textBuf)
 	}
 }
 

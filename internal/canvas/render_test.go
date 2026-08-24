@@ -106,6 +106,29 @@ func TestRenderLineWithArrows(t *testing.T) {
 	}
 }
 
+func TestRenderMultilineText(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(TextCmd{X: 1, Y: 1, Text: "hi\nthere"}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	g := d.Render()
+	want := map[[2]int]rune{
+		{1, 1}: 'h', {2, 1}: 'i',
+		{1, 2}: 't', {2, 2}: 'h', {3, 2}: 'e', {4, 2}: 'r', {5, 2}: 'e',
+	}
+	if len(g) != len(want) {
+		t.Fatalf("got %d cells, want %d: %v", len(g), len(want), g)
+	}
+	for k, v := range want {
+		if got := g[k]; got != v {
+			t.Errorf("cell %v = %q, want %q", k, got, v)
+		}
+	}
+	if _, ok := g[[2]int{3, 1}]; ok {
+		t.Errorf("newline occupied a cell: %v", g)
+	}
+}
+
 func TestRenderTextFreeformAndZOrder(t *testing.T) {
 	d := &Diagram{}
 	if err := d.Apply(BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
