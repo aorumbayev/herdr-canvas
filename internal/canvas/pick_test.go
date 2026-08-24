@@ -92,3 +92,15 @@ func TestMultilineTextHitAndBounds(t *testing.T) {
 		t.Errorf("rect on 're' hit %d, want 1", n)
 	}
 }
+
+func TestTextBoundsUseRenderedCellsOnly(t *testing.T) {
+	e := Element{Type: Text, X: 5, Y: 5, Text: "\nhi"}
+	x1, y1, x2, y2, ok := e.Bounds()
+	if !ok || x1 != 5 || y1 != 6 || x2 != 6 || y2 != 6 {
+		t.Errorf("leading newline bounds = %d,%d,%d,%d ok=%v, want 5,6,6,6", x1, y1, x2, y2, ok)
+	}
+	e.Text = "\n"
+	if _, _, _, _, ok := e.Bounds(); ok {
+		t.Fatal("newline-only text must have no bounds")
+	}
+}

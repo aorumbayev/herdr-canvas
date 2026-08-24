@@ -746,6 +746,18 @@ func TestClickOnSecondTextLineStaysTyping(t *testing.T) {
 	}
 }
 
+func TestShiftEnterPansViewportToKeepCaretVisible(t *testing.T) {
+	m := editor(t)
+	m.tool = toolText
+	m = send(t, m, leftDown(1, 10), key("a"), shiftEnter(), key("b"))
+	if m.vp.origin[1] != 1 {
+		t.Fatalf("origin.y = %d, want 1 so the caret row is in view", m.vp.origin[1])
+	}
+	if got, want := canvasLine(t, m, 9), " b"+cursorGlyph; got != want {
+		t.Errorf("last canvas row = %q, want %q", got, want)
+	}
+}
+
 func TestTextEscapeDiscardsTheInPlacePreview(t *testing.T) {
 	m := editor(t)
 	m.tool = toolText

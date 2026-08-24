@@ -543,6 +543,7 @@ func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.Code == tea.KeyEnter && msg.Mod.Contains(tea.ModShift) {
 		m.textBuf += "\n"
+		m.ensureTextCaretVisible()
 		return nil
 	}
 	switch msg.String() {
@@ -563,6 +564,9 @@ func (m *model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.textBuf += msg.Text
 		}
 	}
+	if m.typing {
+		m.ensureTextCaretVisible()
+	}
 	return nil
 }
 
@@ -579,6 +583,7 @@ func (m *model) acceptPaste(content string) {
 		m.nameInput += text
 	case m.phase == phaseEdit && m.typing:
 		m.textBuf += text
+		m.ensureTextCaretVisible()
 	}
 }
 
@@ -1052,6 +1057,14 @@ func (m model) canvasPoint(x, y int) ([2]int, bool) {
 // ensureVisible moves the viewport to keep the cursor inside the viewport.
 func (m *model) ensureVisible() {
 	m.vp.ensureVisible(m.cursor, m.width, m.layoutHeight())
+}
+
+func (m *model) ensureTextCaretVisible() {
+	if !m.typing {
+		return
+	}
+	_, cx, cy := canvas.PlaceText(m.textPos[0], m.textPos[1], m.textBuf)
+	m.vp.ensureVisible([2]int{cx, cy}, m.width, m.layoutHeight())
 }
 
 func (m *model) apply(cmd canvas.Command) {

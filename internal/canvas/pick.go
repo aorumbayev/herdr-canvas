@@ -42,21 +42,24 @@ func (e *Element) Bounds() (x1, y1, x2, y2 int, ok bool) {
 		}
 		return x1, y1, x2, y2, true
 	case Text:
-		cells, endX, endY := PlaceText(e.X, e.Y, e.Text)
-		if e.Text == "" {
+		cells, _, _ := PlaceText(e.X, e.Y, e.Text)
+		if len(cells) == 0 {
 			return 0, 0, 0, 0, false
 		}
-		x1, y1, x2, y2 := e.X, e.Y, e.X, e.Y
-		for _, c := range cells {
+		x1, y1, x2, y2 := cells[0].X, cells[0].Y, cells[0].X, cells[0].Y
+		for _, c := range cells[1:] {
+			if c.X < x1 {
+				x1 = c.X
+			}
+			if c.Y < y1 {
+				y1 = c.Y
+			}
 			if c.X > x2 {
 				x2 = c.X
 			}
 			if c.Y > y2 {
 				y2 = c.Y
 			}
-		}
-		if len(cells) == 0 {
-			x2, y2 = endX, endY
 		}
 		return x1, y1, x2, y2, true
 	case Freeform:
