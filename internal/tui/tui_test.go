@@ -27,7 +27,7 @@ func editor(t *testing.T) model {
 	if err != nil {
 		t.Fatalf("ModTime: %v", err)
 	}
-	return model{s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox, width: 40, height: 12}
+	return model{s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolBox, width: 40, height: 12, welcomeChecked: true}
 }
 
 func send(t *testing.T, m model, msgs ...tea.Msg) model {

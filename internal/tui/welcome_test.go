@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"herdr-canvas/internal/canvas"
+	"herdr-canvas/internal/store"
 )
 
 var errStub = errors.New("stub")
@@ -180,6 +181,28 @@ func TestMaybeWelcomeSkipsWhenNonEmpty(t *testing.T) {
 	m.maybeWelcome()
 	if m.phase != phaseEdit {
 		t.Fatalf("non-empty: want phaseEdit, got %v", m.phase)
+	}
+}
+
+func TestPickerFirstOpenShowsWelcomeOnce(t *testing.T) {
+	s := &store.Store{Base: t.TempDir()}
+	a, b := &canvas.Diagram{Name: "a"}, &canvas.Diagram{Name: "b"}
+	for _, d := range []*canvas.Diagram{a, b} {
+		if err := s.Save(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := model{s: s, d: &canvas.Diagram{}, phase: phasePick, width: 40, height: 12,
+		welcomeSeen: func() (bool, error) { return false, nil }}
+
+	m.openCanvas(a)
+	if m.phase != phaseWelcome {
+		t.Fatalf("first picker open: want welcome, got %v", m.phase)
+	}
+	m.phase = phaseEdit // user closes the tour
+	m.openCanvas(b)
+	if m.phase == phaseWelcome {
+		t.Fatal("tour reopened on a later in-session switch")
 	}
 }
 

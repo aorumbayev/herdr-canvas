@@ -135,6 +135,7 @@ type model struct {
 
 	welcomeTab     int
 	welcomeDismiss bool
+	welcomeChecked bool
 	welcomeSeen    func() (bool, error)
 	welcomeMark    func() error
 }
@@ -836,10 +837,15 @@ func (m model) welcomeView() string {
 	return strings.Join(out, "\n")
 }
 
-// maybeWelcome opens the tour on a true first run, from every entry path (git
-// startup, the picker, and RunNamed). A read error (missing or corrupt flag)
-// counts as unseen, so the tour opens and the next close rewrites a good file.
+// maybeWelcome opens the tour once per session on a true first run, from every
+// entry path (git startup, the picker's first open, and RunNamed). The
+// once-guard keeps it off later in-session canvas switches. A read error
+// (missing or corrupt flag) counts as unseen, so the next close writes a good file.
 func (m *model) maybeWelcome() {
+	if m.welcomeChecked {
+		return
+	}
+	m.welcomeChecked = true
 	seen := m.welcomeSeen
 	if seen == nil {
 		seen = welcome.Seen
