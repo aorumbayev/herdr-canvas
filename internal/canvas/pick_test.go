@@ -71,3 +71,36 @@ func TestElementBounds(t *testing.T) {
 		t.Errorf("text bounds = %d,%d,%d,%d ok=%v", x1, y1, x2, y2, ok)
 	}
 }
+
+func TestMultilineTextHitAndBounds(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(TextCmd{X: 5, Y: 5, Text: "hi\nthere"}); err != nil {
+		t.Fatal(err)
+	}
+	e := d.Elements[0]
+	x1, y1, x2, y2, ok := e.Bounds()
+	if !ok || x1 != 5 || y1 != 5 || x2 != 9 || y2 != 6 {
+		t.Errorf("bounds = %d,%d,%d,%d ok=%v, want 5,5,9,6", x1, y1, x2, y2, ok)
+	}
+	if got := d.ElementAt(5, 6); got == nil || got.ID != e.ID {
+		t.Errorf("second line miss: %v", got)
+	}
+	if got := d.ElementAt(7, 5); got != nil {
+		t.Errorf("gap after hi on first line hit %v", got)
+	}
+	if n := len(d.ElementsInRect(8, 6, 9, 6)); n != 1 {
+		t.Errorf("rect on 're' hit %d, want 1", n)
+	}
+}
+
+func TestTextBoundsUseRenderedCellsOnly(t *testing.T) {
+	e := Element{Type: Text, X: 5, Y: 5, Text: "\nhi"}
+	x1, y1, x2, y2, ok := e.Bounds()
+	if !ok || x1 != 5 || y1 != 6 || x2 != 6 || y2 != 6 {
+		t.Errorf("leading newline bounds = %d,%d,%d,%d ok=%v, want 5,6,6,6", x1, y1, x2, y2, ok)
+	}
+	e.Text = "\n"
+	if _, _, _, _, ok := e.Bounds(); ok {
+		t.Fatal("newline-only text must have no bounds")
+	}
+}

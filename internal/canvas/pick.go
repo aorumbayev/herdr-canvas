@@ -42,11 +42,26 @@ func (e *Element) Bounds() (x1, y1, x2, y2 int, ok bool) {
 		}
 		return x1, y1, x2, y2, true
 	case Text:
-		n := len([]rune(e.Text))
-		if n == 0 {
+		cells, _, _ := PlaceText(e.X, e.Y, e.Text)
+		if len(cells) == 0 {
 			return 0, 0, 0, 0, false
 		}
-		return e.X, e.Y, e.X + n - 1, e.Y, true
+		x1, y1, x2, y2 := cells[0].X, cells[0].Y, cells[0].X, cells[0].Y
+		for _, c := range cells[1:] {
+			if c.X < x1 {
+				x1 = c.X
+			}
+			if c.Y < y1 {
+				y1 = c.Y
+			}
+			if c.X > x2 {
+				x2 = c.X
+			}
+			if c.Y > y2 {
+				y2 = c.Y
+			}
+		}
+		return x1, y1, x2, y2, true
 	case Freeform:
 		if len(e.Cells) == 0 {
 			return 0, 0, 0, 0, false
@@ -83,7 +98,12 @@ func (e *Element) covers(x, y int) bool {
 			}
 		}
 	case Text:
-		return y == e.Y && x >= e.X && x < e.X+len([]rune(e.Text))
+		cells, _, _ := PlaceText(e.X, e.Y, e.Text)
+		for _, c := range cells {
+			if c.X == x && c.Y == y {
+				return true
+			}
+		}
 	case Freeform:
 		for _, c := range e.Cells {
 			if c.X == x && c.Y == y {
@@ -106,9 +126,9 @@ func (e *Element) intersectsRect(x1, y1, x2, y2 int) bool {
 			}
 		}
 	case Text:
-		for i := range []rune(e.Text) {
-			x := e.X + i
-			if x >= x1 && x <= x2 && e.Y >= y1 && e.Y <= y2 {
+		cells, _, _ := PlaceText(e.X, e.Y, e.Text)
+		for _, c := range cells {
+			if c.X >= x1 && c.X <= x2 && c.Y >= y1 && c.Y <= y2 {
 				return true
 			}
 		}

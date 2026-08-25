@@ -18,8 +18,11 @@ func (d *Diagram) Paint() map[[2]int]CellPaint {
 		case Line:
 			paintLine(out, e)
 		case Text:
-			for i, r := range []rune(e.Text) {
-				setPaint(out, [2]int{e.X + i, e.Y}, CellPaint{Ch: r, FG: e.Color})
+			cells, _, _ := PlaceText(e.X, e.Y, e.Text)
+			for _, c := range cells {
+				if r := []rune(c.Ch); len(r) > 0 {
+					setPaint(out, [2]int{c.X, c.Y}, CellPaint{Ch: r[0], FG: e.Color})
+				}
 			}
 		case Freeform:
 			for _, c := range e.Cells {

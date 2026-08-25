@@ -43,6 +43,23 @@ func TestPaintLinePunchesFill(t *testing.T) {
 	}
 }
 
+func TestPaintMultilineText(t *testing.T) {
+	d := &Diagram{}
+	if err := d.Apply(TextCmd{X: 0, Y: 0, Text: "a\nb", Color: "red"}); err != nil {
+		t.Fatal(err)
+	}
+	p := d.Paint()
+	if got := p[[2]int{0, 0}]; got.Ch != 'a' || got.FG != "red" {
+		t.Errorf("first line = %+v, want a red", got)
+	}
+	if got := p[[2]int{0, 1}]; got.Ch != 'b' || got.FG != "red" {
+		t.Errorf("second line = %+v, want b red", got)
+	}
+	if _, ok := p[[2]int{1, 0}]; ok {
+		t.Errorf("newline painted a cell: %+v", p)
+	}
+}
+
 func TestPaintZOrderLaterWins(t *testing.T) {
 	d := &Diagram{}
 	if err := d.Apply(TextCmd{X: 1, Y: 1, Text: "A", Color: "red"}); err != nil {
