@@ -158,6 +158,31 @@ func TestWelcomeMarkErrorSurfaces(t *testing.T) {
 	}
 }
 
+func TestMaybeWelcomeOpensWhenUnseenAndEmpty(t *testing.T) {
+	m := model{phase: phaseEdit, d: &canvas.Diagram{}, welcomeSeen: func() (bool, error) { return false, nil }}
+	m.maybeWelcome()
+	if m.phase != phaseWelcome {
+		t.Fatalf("want phaseWelcome, got %v", m.phase)
+	}
+}
+
+func TestMaybeWelcomeSkipsWhenSeen(t *testing.T) {
+	m := model{phase: phaseEdit, d: &canvas.Diagram{}, welcomeSeen: func() (bool, error) { return true, nil }}
+	m.maybeWelcome()
+	if m.phase != phaseEdit {
+		t.Fatalf("seen: want phaseEdit, got %v", m.phase)
+	}
+}
+
+func TestMaybeWelcomeSkipsWhenNonEmpty(t *testing.T) {
+	m := model{phase: phaseEdit, d: &canvas.Diagram{Elements: []canvas.Element{boxEl(0, 0, 2, 2, "")}},
+		welcomeSeen: func() (bool, error) { return false, nil }}
+	m.maybeWelcome()
+	if m.phase != phaseEdit {
+		t.Fatalf("non-empty: want phaseEdit, got %v", m.phase)
+	}
+}
+
 func TestShouldWelcome(t *testing.T) {
 	empty := &canvas.Diagram{}
 	full := &canvas.Diagram{Elements: []canvas.Element{boxEl(0, 0, 2, 2, "")}}

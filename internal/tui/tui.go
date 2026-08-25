@@ -135,6 +135,7 @@ type model struct {
 
 	welcomeTab     int
 	welcomeDismiss bool
+	welcomeSeen    func() (bool, error)
 	welcomeMark    func() error
 }
 
@@ -171,12 +172,7 @@ func Run(cwd string) error {
 		m.d = d
 		m.mtime, _ = s.ModTime(n)
 		m.phase = phaseEdit
-		// A read error (missing or corrupt flag) counts as unseen, so the tour
-		// opens and the next close rewrites a good file.
-		seen, _ := welcome.Seen()
-		if shouldWelcome(seen, d) {
-			m.openWelcome()
-		}
+		m.maybeWelcome()
 	}
 
 	return run(m)
@@ -190,10 +186,12 @@ func RunNamed(n string) error {
 		return err
 	}
 	mt, _ := s.ModTime(n)
-	return run(model{
+	m := model{
 		s: s, d: d, mtime: mt, phase: phaseEdit, tool: toolSelect,
 		width: defaultW, height: defaultH,
-	})
+	}
+	m.maybeWelcome()
+	return run(m)
 }
 
 func run(m model) error {
@@ -518,6 +516,7 @@ func (m *model) openCanvas(d *canvas.Diagram) {
 	m.editID = ""
 	m.phase = phaseEdit
 	m.status = ""
+	m.maybeWelcome()
 }
 
 func (m *model) nameKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -835,6 +834,20 @@ func (m model) welcomeView() string {
 		out[i] = r.styled
 	}
 	return strings.Join(out, "\n")
+}
+
+// maybeWelcome opens the tour on a true first run, from every entry path (git
+// startup, the picker, and RunNamed). A read error (missing or corrupt flag)
+// counts as unseen, so the tour opens and the next close rewrites a good file.
+func (m *model) maybeWelcome() {
+	seen := m.welcomeSeen
+	if seen == nil {
+		seen = welcome.Seen
+	}
+	ok, _ := seen()
+	if shouldWelcome(ok, m.d) {
+		m.openWelcome()
+	}
 }
 
 // shouldWelcome opens the tour only on a true first run: never seen, and the
