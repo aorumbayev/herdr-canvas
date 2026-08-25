@@ -38,3 +38,5 @@ go.work.sum
 .semrel/
 .generated-go-semantic-release-changelog.md
 dist/
+
+.plans/

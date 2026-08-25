@@ -15,6 +15,12 @@ if [ ! -f "$toml" ]; then
 	die "missing $toml"
 fi
 
+# Local development: keep a source-built bin/herdr-canvas instead of a release.
+if [ -n "${HERDR_CANVAS_SKIP_FETCH:-}" ]; then
+	echo "fetch-release: HERDR_CANVAS_SKIP_FETCH set; kept bin/herdr-canvas" >&2
+	exit 0
+fi
+
 version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$toml" | head -n 1)
 if [ -z "$version" ]; then
 	die "no version field in $toml"
