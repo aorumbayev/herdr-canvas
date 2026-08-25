@@ -17,6 +17,7 @@ import (
 	"herdr-canvas/internal/store"
 	"herdr-canvas/internal/update"
 	"herdr-canvas/internal/version"
+	"herdr-canvas/internal/welcome"
 )
 
 type phase int
@@ -28,6 +29,7 @@ const (
 	phaseAgent
 	phaseHelp
 	phasePalette
+	phaseWelcome
 )
 
 type tool int
@@ -130,6 +132,10 @@ type model struct {
 
 	brushColor string
 	brushFill  bool
+
+	welcomeTab     int
+	welcomeDismiss bool
+	welcomeMark    func() error
 }
 
 // Run starts the TUI. Run opens the editor for the composite diagram in cwd.
@@ -165,6 +171,12 @@ func Run(cwd string) error {
 		m.d = d
 		m.mtime, _ = s.ModTime(n)
 		m.phase = phaseEdit
+		// A read error (missing or corrupt flag) counts as unseen, so the tour
+		// opens and the next close rewrites a good file.
+		seen, _ := welcome.Seen()
+		if shouldWelcome(seen, d) {
+			m.openWelcome()
+		}
 	}
 
 	return run(m)
@@ -278,6 +290,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		case phasePalette:
 			cmd := m.paletteKey(msg)
+			return m, cmd
+		case phaseWelcome:
+			cmd := m.welcomeKey(msg)
 			return m, cmd
 		case phaseEdit:
 			if m.typing && bkey.Matches(msg, keyUndo) {
@@ -657,6 +672,8 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.openPicker()
 	case "?", "h":
 		m.openHelp()
+	case "t":
+		m.openWelcome()
 	case "esc":
 		m.editEsc()
 	case "q", "ctrl+c":
@@ -770,6 +787,60 @@ func (m *model) helpKey(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Quit
 	}
 	return nil
+}
+
+func (m *model) openWelcome() {
+	m.mouse = false
+	m.anchored = false
+	m.anchor = [2]int{}
+	m.pending = nil
+	m.selAct = selectNone
+	m.panning = false
+	m.welcomeTab = 0
+	m.welcomeDismiss = true
+	m.phase = phaseWelcome
+}
+
+func (m *model) welcomeKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "tab", "right", "l":
+		m.welcomeTab = (m.welcomeTab + 1) % len(wtabs)
+	case "shift+tab", "left", "h":
+		m.welcomeTab = (m.welcomeTab - 1 + len(wtabs)) % len(wtabs)
+	case "d":
+		m.welcomeDismiss = !m.welcomeDismiss
+	case "esc", "q":
+		m.closeWelcome()
+	}
+	return nil
+}
+
+func (m *model) closeWelcome() {
+	if m.welcomeDismiss {
+		mark := m.welcomeMark
+		if mark == nil {
+			mark = welcome.Mark
+		}
+		if err := mark(); err != nil {
+			m.status = err.Error()
+		}
+	}
+	m.phase = phaseEdit
+}
+
+func (m model) welcomeView() string {
+	rows := welcomeLines(wtabs, m.welcomeTab, max(1, m.width), max(1, m.height), m.welcomeDismiss)
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.styled
+	}
+	return strings.Join(out, "\n")
+}
+
+// shouldWelcome opens the tour only on a true first run: never seen, and the
+// diagram is still empty, so it never interrupts existing work.
+func shouldWelcome(seen bool, d *canvas.Diagram) bool {
+	return !seen && d != nil && len(d.Elements) == 0
 }
 
 func (m model) noticeRows() int {
@@ -1305,6 +1376,8 @@ func (m model) View() tea.View {
 		body = m.agentView()
 	case phaseHelp:
 		body = m.helpView()
+	case phaseWelcome:
+		body = m.welcomeView()
 	default:
 		body = m.editView()
 	}
@@ -1342,7 +1415,7 @@ func helpLines(width int) []string {
 			"  double-click edit text  mid-drag pan",
 			"  wheel pan  shift=side  ctrl=same pan",
 			"Keys  arrows  space/enter  c color  f fill",
-			"  del/back  ctrl+z/y  s send  o picker  esc",
+			"  del/back ctrl+z/y s send o picker t tour esc",
 			"Send/Picker  ↑↓/jk enter esc  n=new",
 			"esc / ? / h close",
 		}
@@ -1367,7 +1440,7 @@ func helpLines(width int) []string {
 		"  delete         selected elements · both delete keys",
 		"  c              color palette · f fill brush / selected boxes",
 		"",
-		"View   click canvases (o) to open picker · recenter fits drawing",
+		"View   click canvases (o) to open picker · recenter fits · t tour",
 		"Edit   ctrl+z undo · ctrl+y redo · s send · o picker · esc select · q quit",
 		"Send   ↑↓/jk choose · enter send · esc cancel",
 		"Picker ↑↓/jk · enter open · n new · delete confirm · esc back",

@@ -280,6 +280,16 @@ PATH="$PWD/limited" run_with_uname Darwin arm64 /bin/sh "$script"
 assert "wget fallback installs binary" test -f bin/herdr-canvas
 cd "$workdir"
 
+# HERDR_CANVAS_SKIP_FETCH keeps a source-built binary and never downloads
+mkdir case-skip
+cd case-skip
+write_toml 0.9.9
+mkdir -p bin
+printf 'local-build\n' >bin/herdr-canvas
+HERDR_CANVAS_SKIP_FETCH=1 run_with_uname Darwin arm64 /bin/sh "$script"
+assert "skip keeps the local binary" grep -q local-build bin/herdr-canvas
+cd "$workdir"
+
 assert_false "no go command in fetch-release.sh" grep -E '(^|[[:space:]])go[[:space:]]' "$script"
 
 assert "downloads v\$version assets" grep -q 'v$version/' "$script"
