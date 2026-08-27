@@ -23,8 +23,8 @@ type batchLine struct {
 	text  string
 	verb  elementVerb
 	cmd   canvas.Command
-	alias string // name this line's new element takes, if any
-	ref   string // alias this line points at, if any
+	alias string   // name this line's new element takes, if any
+	refs  []string // alias per leading id argument, empty where the arg was a real id
 }
 
 func batchCmd() *cobra.Command {
@@ -57,8 +57,8 @@ func applyBatch(s *store.Store, d *canvas.Diagram, lines []batchLine) error {
 	var created []string
 	for _, l := range lines {
 		c := l.cmd
-		if l.ref != "" {
-			c = withID(c, ids[l.ref])
+		if len(l.refs) > 0 {
+			c = withRefs(c, l.refs, ids)
 		}
 		if err := d.Apply(c); err != nil {
 			return lineErr(l, err)
@@ -118,7 +118,7 @@ func parseLine(l *batchLine, aliases map[string]bool) error {
 	rest := toks[1:]
 	if alias, n := aliasSuffix(rest); alias != "" {
 		if !v.creates {
-			return fmt.Errorf("only box, line, text and draw can name an alias, not %s", v.name)
+			return fmt.Errorf("only a verb that makes a new element can name an alias, not %s", v.name)
 		}
 		if err := checkAlias(alias, aliases); err != nil {
 			return err
@@ -140,11 +140,17 @@ func parseLine(l *batchLine, aliases map[string]bool) error {
 	if err := cmd.ValidateArgs(args); err != nil {
 		return err
 	}
-	if v.refs && !idPattern.MatchString(args[0]) {
-		if !aliases[args[0]] {
-			return fmt.Errorf("no element or alias %q", args[0])
+	if v.refs > 0 {
+		l.refs = make([]string, v.refs)
+		for i := 0; i < v.refs && i < len(args); i++ {
+			if idPattern.MatchString(args[i]) {
+				continue
+			}
+			if !aliases[args[i]] {
+				return fmt.Errorf("no element or alias %q", args[i])
+			}
+			l.refs[i] = args[i]
 		}
-		l.ref = args[0]
 	}
 	l.cmd, err = v.build(cmd, args)
 	return err
@@ -172,22 +178,53 @@ func aliasSuffix(toks []token) (string, int) {
 	return toks[n-1].text, n - 2
 }
 
-func withID(c canvas.Command, id string) canvas.Command {
+// withRefs swaps each aliased argument for the id the alias resolved to. An
+// empty entry means that argument was already a real id.
+func withRefs(c canvas.Command, refs []string, ids map[string]string) canvas.Command {
+	id := func(i int) (string, bool) {
+		if i >= len(refs) || refs[i] == "" {
+			return "", false
+		}
+		return ids[refs[i]], true
+	}
 	switch t := c.(type) {
 	case canvas.MoveCmd:
-		t.ID = id
+		if v, ok := id(0); ok {
+			t.ID = v
+		}
 		return t
 	case canvas.DeleteCmd:
-		t.ID = id
+		if v, ok := id(0); ok {
+			t.ID = v
+		}
+		return t
+	case canvas.UnedgeCmd:
+		if v, ok := id(0); ok {
+			t.ID = v
+		}
 		return t
 	case canvas.LabelCmd:
-		t.ID = id
+		if v, ok := id(0); ok {
+			t.ID = v
+		}
 		return t
 	case canvas.ColorCmd:
-		t.ID = id
+		if v, ok := id(0); ok {
+			t.ID = v
+		}
 		return t
 	case canvas.FillCmd:
-		t.ID = id
+		if v, ok := id(0); ok {
+			t.ID = v
+		}
+		return t
+	case canvas.EdgeCmd:
+		if v, ok := id(0); ok {
+			t.From = v
+		}
+		if v, ok := id(1); ok {
+			t.To = v
+		}
 		return t
 	}
 	return c

@@ -106,7 +106,7 @@ func TestBatchRejected(t *testing.T) {
 		{"id-shaped alias", "box 0 0 1 1 as b1\n", `line 1: alias "b1" looks like an element id`},
 		{"bad alias syntax", "box 0 0 1 1 as 9lives\n", `line 1: alias "9lives" must match`},
 		{"undefined alias", "label web hello\n", `line 1: no element or alias "web"`},
-		{"alias on non-creating verb", "box 0 0 1 1 as a\nmove a 1 1 as b\n", "line 2: only box, line, text and draw"},
+		{"alias on non-creating verb", "box 0 0 1 1 as a\nmove a 1 1 as b\n", "line 2: only a verb that makes a new element"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -140,6 +140,18 @@ func TestBatchAccepted(t *testing.T) {
 			script: "\n# a comment\n   # indented comment\n\nbox 0 0 3 2\n",
 			wantID: "b1",
 			want:   []string{"b1 box 0,0-3,2"},
+		},
+		{
+			name:   "edge joins two boxes the same batch creates",
+			script: "box 0 0 9 2 web as web\nbox 0 8 9 10 db as db\nedge web db writes\n",
+			wantID: "b1 web\nb2 db\nl3",
+			want:   []string{`l3 edge b1->b2 arrow end "writes"`},
+		},
+		{
+			name:   "unedge takes an alias",
+			script: "box 0 0 9 2 a as a\nbox 0 8 9 10 b as b\nedge a b as wire\nunedge wire\n",
+			wantID: "b1 a\nb2 b\nl3 wire",
+			want:   []string{"b1 box 0,0-9,2", "b2 box 0,8-9,10"},
 		},
 		{
 			name:   "quoted label keeps spaces",

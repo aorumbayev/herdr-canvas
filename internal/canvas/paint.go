@@ -1,10 +1,12 @@
 package canvas
 
-// CellPaint is one rendered cell with optional foreground and background colors.
+// CellPaint is one rendered cell with optional foreground and background
+// colors. Reverse swaps the two, and marks a cell the editor is pointing at.
 type CellPaint struct {
-	Ch rune
-	FG string
-	BG string
+	Ch      rune
+	FG      string
+	BG      string
+	Reverse bool
 }
 
 // Paint produces a colored render of the diagram. Later elements cover earlier
@@ -109,8 +111,12 @@ func paintLine(m map[[2]int]CellPaint, e Element) {
 		g[p] = cp.Ch
 	}
 	drawLine(g, e)
-	pts, _ := elbow(e.X1, e.Y1, e.X2, e.Y2)
+	pts := linePoints(e)
 	for _, p := range pts {
+		setPaint(m, p, CellPaint{Ch: g[p], FG: e.Color})
+	}
+	for _, c := range lineLabelCells(e) {
+		p := [2]int{c.X, c.Y}
 		setPaint(m, p, CellPaint{Ch: g[p], FG: e.Color})
 	}
 }

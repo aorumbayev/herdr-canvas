@@ -1034,6 +1034,14 @@ func (m *model) commit() {
 			Color: m.brushColor, Fill: m.brushFill,
 		})
 	case toolLine, toolArrow:
+		if from, to, ok := m.edgeEnds(); ok {
+			m.apply(canvas.EdgeCmd{
+				From: from.ID, To: to.ID,
+				Arrow: m.lineArrow(),
+				Color: m.brushColor,
+			})
+			return
+		}
 		start, end := m.snap(m.anchor), m.snap(m.cursor)
 		m.apply(canvas.LineCmd{
 			X1: start[0], Y1: start[1], X2: end[0], Y2: end[1],
@@ -1353,7 +1361,7 @@ func helpLines(width int) []string {
 		"Tools  1 select  2 box  3 line  4 arrow  5 text  6 draw  ? help",
 		"",
 		"Mouse",
-		"  left-drag      box, line, arrow, draw · select marquee / move",
+		"  left-drag      box, line, arrow, draw · box→box arrow sticks",
 		"  left-click     select one · shift-click toggle · text to type",
 		"  double-click   edit existing text",
 		"  middle-drag    pan",
@@ -1449,6 +1457,11 @@ func (m model) editView() string {
 		elems = m.overlayElements()
 	}
 	painted := (&canvas.Diagram{Elements: elems}).Paint()
+	if m.tool == toolArrow && (m.mouse || m.anchored) {
+		if e := m.d.BoxAt(m.cursor[0], m.cursor[1]); e != nil {
+			highlightBox(painted, e)
+		}
+	}
 	ch := layoutChrome(m.width, m.d.Name, m.cursor, m.brushColor, m.brushFill, m.tool, m.hist.canUndo(), m.hist.canRedo(), m.badge())
 	var b strings.Builder
 	b.WriteString(ch.header)
@@ -1523,7 +1536,9 @@ func (m model) movePreview(elems []canvas.Element, ids map[string]bool) []canvas
 		}
 		out = append(out, moved)
 	}
-	return out
+	preview := canvas.Diagram{Elements: out}
+	preview.RederiveEdges()
+	return preview.Elements
 }
 
 // ghostCells renders one element on its own and returns its cells as the ghost
@@ -1536,6 +1551,35 @@ func ghostCells(e canvas.Element) []canvas.Cell {
 		cells = append(cells, canvas.Cell{X: p[0], Y: p[1], Ch: ghostGlyph})
 	}
 	return cells
+}
+
+// edgeEnds returns the two boxes that a tool-4 drag connects. The test uses
+// the drag points as the person left them, not the snapped points, so an arrow
+// sticks only when the drag really began and ended in a box.
+func (m model) edgeEnds() (from, to *canvas.Element, ok bool) {
+	if m.tool != toolArrow {
+		return nil, nil, false
+	}
+	from = m.d.BoxAt(m.anchor[0], m.anchor[1])
+	to = m.d.BoxAt(m.cursor[0], m.cursor[1])
+	if from == nil || to == nil || from.ID == to.ID {
+		return nil, nil, false
+	}
+	return from, to, true
+}
+
+// highlightBox marks the cells of one box, so a person dragging an arrow sees
+// the box the arrow is about to stick to.
+func highlightBox(painted map[[2]int]canvas.CellPaint, e *canvas.Element) {
+	for y := e.Y1; y <= e.Y2; y++ {
+		for x := e.X1; x <= e.X2; x++ {
+			p := [2]int{x, y}
+			if cp, ok := painted[p]; ok {
+				cp.Reverse = true
+				painted[p] = cp
+			}
+		}
+	}
 }
 
 func (m model) lineArrow() canvas.Arrow {
@@ -1567,10 +1611,13 @@ func (m model) overlayElements() []canvas.Element {
 		elems = append(elems, e)
 	}
 	if m.tool == toolLine || m.tool == toolArrow {
-		start, end := m.snap(m.anchor), m.snap(m.cursor)
-		e := canvas.Element{
-			Type: canvas.Line, X1: start[0], Y1: start[1], X2: end[0], Y2: end[1],
-			Arrow: m.lineArrow(),
+		e := canvas.Element{Type: canvas.Line, Arrow: m.lineArrow()}
+		if from, to, ok := m.edgeEnds(); ok {
+			e.From, e.To = from.ID, to.ID
+			e.X1, e.Y1, e.X2, e.Y2, e.Vertical = canvas.EdgeEndpoints(*from, *to)
+		} else {
+			start, end := m.snap(m.anchor), m.snap(m.cursor)
+			e.X1, e.Y1, e.X2, e.Y2 = start[0], start[1], end[0], end[1]
 		}
 		brush(&e)
 		elems = append(elems, e)

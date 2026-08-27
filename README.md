@@ -55,6 +55,8 @@ Push `prefix+d` to open the canvas or to close the canvas. If you are in a git r
 | `esc` | Cancel the action. Then select the select tool. Then remove the selection. |
 | `q` | Stop herdr-canvas. |
 
+Draw an arrow from one box to a second box. The arrow sticks to the two boxes. If you move a box, the arrow moves with the box. If you erase a box, herdr-canvas erases the arrow. One undo step puts the box and the arrow back. The arrow goes out of the first box, across the space between the boxes, and into the second box. If the two boxes are in line, the arrow is one straight line. The arrow does not go along the border of a box. An arrow that sticks has a doubled line (`═` and `║`). An arrow that does not touch two boxes has a single line (`─` and `│`). While you drag, herdr-canvas marks the box under the pointer.
+
 herdr-canvas keeps each change immediately. Push Recenter to put the diagram in the view. If you erase a diagram in the list, herdr-canvas tells you to push `y` or `N`. You cannot cancel that erase.
 
 ## herdr agents
@@ -83,6 +85,8 @@ For one small change, use one command:
 ```bash
 herdr-canvas list
 herdr-canvas --name mydiagram export
+herdr-canvas --name mydiagram box 2 1 20 6 "web server"
+herdr-canvas --name mydiagram edge b1 b3 "retry"
 herdr-canvas --name mydiagram delete b1
 herdr-canvas skill
 ```
@@ -96,6 +100,7 @@ The `--name` alternative selects a diagram. The `--create` alternative makes a d
 | `new` / `open` / `list` | Makes a diagram, opens a diagram, or shows the names of the diagrams |
 | `export` | Shows the picture and the legend |
 | `box` `line` `text` `draw` | Adds an element (`--color`, box `--fill`) |
+| `edge` / `unedge` | Connects two boxes with an arrow that follows them, or removes that arrow |
 | `move` `delete` `label` `color` `fill` | Changes an element |
 | `skill` / `setup` / `update` / `--version` | Shows the instructions, writes the hotkey, installs a tag, or shows the version |
 

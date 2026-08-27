@@ -125,3 +125,53 @@ func TestCLIColorAndFill(t *testing.T) {
 		t.Fatal("want error for fill maybe")
 	}
 }
+
+func TestCLIEdgeFollowsItsBoxes(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	run(t, "new", "demo")
+	run(t, "--name", "demo", "box", "0", "0", "4", "2")
+	run(t, "--name", "demo", "box", "0", "8", "4", "10")
+	run(t, "--name", "demo", "edge", "b1", "b2", "retry")
+	if got := run(t, "--name", "demo", "export"); !strings.Contains(got, `l3 edge b1->b2 arrow end "retry"`) {
+		t.Errorf("export = %q, want an edge legend line", got)
+	}
+	run(t, "--name", "demo", "move", "b2", "20", "0")
+	got := run(t, "--name", "demo", "export")
+	if !strings.Contains(got, "═") {
+		t.Errorf("export = %q, want a doubled run after the move", got)
+	}
+	run(t, "--name", "demo", "unedge", "l3")
+	if got := run(t, "--name", "demo", "export"); strings.Contains(got, "edge") {
+		t.Errorf("export = %q, want no edge after unedge", got)
+	}
+}
+
+func TestCLIEdgeRejectsBadEnds(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	run(t, "new", "demo")
+	run(t, "--name", "demo", "box", "0", "0", "4", "2")
+	run(t, "--name", "demo", "text", "0", "8", "hi")
+	cases := [][]string{
+		{"--name", "demo", "edge", "b1", "b9"},
+		{"--name", "demo", "edge", "b1", "t2"},
+	}
+	for _, args := range cases {
+		root := newRootCmd()
+		root.SetArgs(args)
+		if err := root.Execute(); err == nil {
+			t.Errorf("%v = nil, want an error", args)
+		}
+	}
+}
+
+func TestCLIDeleteBoxRemovesItsEdges(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	run(t, "new", "demo")
+	run(t, "--name", "demo", "box", "0", "0", "4", "2")
+	run(t, "--name", "demo", "box", "0", "8", "4", "10")
+	run(t, "--name", "demo", "edge", "b1", "b2")
+	run(t, "--name", "demo", "delete", "b1")
+	if got := run(t, "--name", "demo", "export"); strings.Contains(got, "l3") {
+		t.Errorf("export = %q, want the edge gone with its box", got)
+	}
+}

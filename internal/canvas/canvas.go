@@ -31,9 +31,12 @@ type Cell struct {
 // set of fields.
 //
 //	Box uses X1, Y1, X2, Y2 and Label.
-//	Line uses X1, Y1, X2, Y2 and Arrow.
+//	Line uses X1, Y1, X2, Y2, Arrow and Label.
 //	Text uses X, Y and Text.
 //	Freeform uses Cells.
+//
+// A Line that names two boxes in From and To is an edge. The endpoints of an
+// edge are derived from the two boxes and are never authored.
 type Element struct {
 	ID    string `json:"id"`
 	Type  Type   `json:"type"`
@@ -49,6 +52,16 @@ type Element struct {
 	Cells []Cell `json:"cells,omitempty"`
 	Color string `json:"color,omitempty"`
 	Fill  bool   `json:"fill,omitempty"`
+	From  string `json:"from,omitempty"`
+	To    string `json:"to,omitempty"`
+	// Vertical says an edge leaves and enters its boxes through their top and
+	// bottom borders. It is derived with the endpoints and never authored.
+	Vertical bool `json:"vertical,omitempty"`
+}
+
+// IsEdge reports whether the element is a Line held by reference to two boxes.
+func (e Element) IsEdge() bool {
+	return e.Type == Line && e.From != "" && e.To != ""
 }
 
 // Diagram is the aggregate root. A Diagram is a named set of Elements. Later

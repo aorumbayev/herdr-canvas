@@ -61,6 +61,46 @@ func (d *Diagram) Apply(cmd Command) error {
 			Arrow: c.Arrow,
 			Color: color,
 		})
+	case EdgeCmd:
+		color, err := parseColor(c.Color)
+		if err != nil {
+			return fmt.Errorf("edge: color %q: %w", c.Color, err)
+		}
+		from, err := d.findBox(c.From)
+		if err != nil {
+			return err
+		}
+		to, err := d.findBox(c.To)
+		if err != nil {
+			return err
+		}
+		if c.From == c.To {
+			return fmt.Errorf("edge %s: an edge needs two different boxes", c.From)
+		}
+		x1, y1, x2, y2, vertical := EdgeEndpoints(*from, *to)
+		d.Elements = append(d.Elements, Element{
+			ID:       d.nextID("l"),
+			Type:     Line,
+			X1:       x1,
+			Y1:       y1,
+			X2:       x2,
+			Y2:       y2,
+			Label:    c.Label,
+			Arrow:    c.Arrow,
+			Color:    color,
+			From:     c.From,
+			To:       c.To,
+			Vertical: vertical,
+		})
+	case UnedgeCmd:
+		e, err := d.find(c.ID)
+		if err != nil {
+			return err
+		}
+		if !e.IsEdge() {
+			return fmt.Errorf("unedge %s: not an edge", c.ID)
+		}
+		d.remove(c.ID)
 	case TextCmd:
 		color, err := parseColor(c.Color)
 		if err != nil {
@@ -104,20 +144,24 @@ func (d *Diagram) Apply(cmd Command) error {
 		if err != nil {
 			return err
 		}
-		moved, err := Translate(*e, c.DX, c.DY)
-		if err != nil {
-			return fmt.Errorf("move %s: %w", c.ID, err)
+		// An edge takes its endpoints from its boxes, so moving it alone is
+		// not a move; the rederive below puts it back.
+		if !e.IsEdge() {
+			moved, err := Translate(*e, c.DX, c.DY)
+			if err != nil {
+				return fmt.Errorf("move %s: %w", c.ID, err)
+			}
+			*e = moved
 		}
-		*e = moved
 	case DeleteCmd:
-		if _, err := d.find(c.ID); err != nil {
+		e, err := d.find(c.ID)
+		if err != nil {
 			return err
 		}
-		for i := range d.Elements {
-			if d.Elements[i].ID == c.ID {
-				d.Elements = append(d.Elements[:i], d.Elements[i+1:]...)
-				break
-			}
+		box := e.Type == Box
+		d.remove(c.ID)
+		if box {
+			d.dropEdgesTo(c.ID)
 		}
 	case LabelCmd:
 		e, err := d.find(c.ID)
@@ -159,6 +203,7 @@ func (d *Diagram) Apply(cmd Command) error {
 	default:
 		return fmt.Errorf("unsupported command %T", cmd)
 	}
+	d.RederiveEdges()
 	return nil
 }
 
@@ -207,6 +252,28 @@ func (d *Diagram) find(id string) (*Element, error) {
 		}
 	}
 	return nil, fmt.Errorf("unknown element id %q", id)
+}
+
+// findBox returns a pointer to the box with the given id.
+func (d *Diagram) findBox(id string) (*Element, error) {
+	e, err := d.find(id)
+	if err != nil {
+		return nil, err
+	}
+	if e.Type != Box {
+		return nil, fmt.Errorf("edge %s: not a box", id)
+	}
+	return e, nil
+}
+
+// remove drops the element with the given id.
+func (d *Diagram) remove(id string) {
+	for i := range d.Elements {
+		if d.Elements[i].ID == id {
+			d.Elements = append(d.Elements[:i], d.Elements[i+1:]...)
+			return
+		}
+	}
 }
 
 // validateCorners enforces non-negative coordinates and x2>=x1, y2>=y1.

@@ -21,6 +21,20 @@ type LineCmd struct {
 	Color          string
 }
 
+// EdgeCmd adds a Line held by reference to two boxes. The endpoints come from
+// the boxes, so the line follows them.
+type EdgeCmd struct {
+	From, To string
+	Label    string
+	Arrow    Arrow
+	Color    string
+}
+
+// UnedgeCmd removes an edge. The two boxes stay.
+type UnedgeCmd struct {
+	ID string
+}
+
 // TextCmd adds a Text string at a coordinate.
 type TextCmd struct {
 	X, Y  int
@@ -72,6 +86,8 @@ type FillCmd struct {
 
 func (BoxCmd) command()     {}
 func (LineCmd) command()    {}
+func (EdgeCmd) command()    {}
+func (UnedgeCmd) command()  {}
 func (TextCmd) command()    {}
 func (DrawCmd) command()    {}
 func (MoveCmd) command()    {}

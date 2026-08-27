@@ -74,19 +74,21 @@ type elementVerb struct {
 	newCmd  func() *cobra.Command
 	build   func(*cobra.Command, []string) (canvas.Command, error)
 	creates bool // assigns a new element id
-	refs    bool // first argument is an element id
+	refs    int  // how many leading arguments are element ids
 }
 
 var elementVerbs = []elementVerb{
 	{name: "box", newCmd: boxCmd, build: buildBox, creates: true},
 	{name: "line", newCmd: lineCmd, build: buildLine, creates: true},
+	{name: "edge", newCmd: edgeCmd, build: buildEdge, creates: true, refs: 2},
 	{name: "text", newCmd: textCmd, build: buildText, creates: true},
 	{name: "draw", newCmd: drawCmd, build: buildDraw, creates: true},
-	{name: "move", newCmd: moveCmd, build: buildMove, refs: true},
-	{name: "delete", newCmd: deleteCmd, build: buildDelete, refs: true},
-	{name: "label", newCmd: labelCmd, build: buildLabel, refs: true},
-	{name: "color", newCmd: colorCmd, build: buildColor, refs: true},
-	{name: "fill", newCmd: fillCmd, build: buildFill, refs: true},
+	{name: "move", newCmd: moveCmd, build: buildMove, refs: 1},
+	{name: "delete", newCmd: deleteCmd, build: buildDelete, refs: 1},
+	{name: "unedge", newCmd: unedgeCmd, build: buildUnedge, refs: 1},
+	{name: "label", newCmd: labelCmd, build: buildLabel, refs: 1},
+	{name: "color", newCmd: colorCmd, build: buildColor, refs: 1},
+	{name: "fill", newCmd: fillCmd, build: buildFill, refs: 1},
 }
 
 func lookupVerb(name string) (elementVerb, bool) {
@@ -219,6 +221,45 @@ func buildLine(cmd *cobra.Command, a []string) (canvas.Command, error) {
 		Arrow: arr,
 		Color: flagString(cmd, "color"),
 	}, nil
+}
+
+func edgeCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "edge <from> <to> [label]",
+		Short: "Connect two boxes with an arrow that follows them",
+		Args:  cobra.MinimumNArgs(2),
+		RunE:  runElement(buildEdge),
+	}
+	c.Flags().String("arrow", string(canvas.ArrowEnd), "arrow placement: none|start|end|both")
+	c.Flags().String("color", "", "foreground color: red|green|yellow|blue|magenta|cyan|white|black|default")
+	return c
+}
+
+func buildEdge(cmd *cobra.Command, a []string) (canvas.Command, error) {
+	arr, err := arrow(flagString(cmd, "arrow"))
+	if err != nil {
+		return nil, err
+	}
+	return canvas.EdgeCmd{
+		From:  a[0],
+		To:    a[1],
+		Label: strings.Join(a[2:], " "),
+		Arrow: arr,
+		Color: flagString(cmd, "color"),
+	}, nil
+}
+
+func unedgeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unedge <id>",
+		Short: "Remove an edge and keep its boxes",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runElement(buildUnedge),
+	}
+}
+
+func buildUnedge(_ *cobra.Command, a []string) (canvas.Command, error) {
+	return canvas.UnedgeCmd{ID: a[0]}, nil
 }
 
 func textCmd() *cobra.Command {
