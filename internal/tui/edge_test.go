@@ -102,6 +102,26 @@ func TestDeletingABoxAndUndoingRestoresItsEdges(t *testing.T) {
 	}
 }
 
+func TestDeletingABoxAndItsEdgeTogetherDeletesBoth(t *testing.T) {
+	m := twoBoxes(t)
+	if !m.commitCmds([]canvas.Command{canvas.EdgeCmd{From: "b1", To: "b2"}}) {
+		t.Fatalf("EdgeCmd: %s", m.status)
+	}
+	edge := m.d.Elements[2].ID
+	m.tool = toolSelect
+	m.selected = map[string]bool{"b1": true, edge: true}
+	m.deleteSelected()
+	if m.status != "" {
+		t.Fatalf("status = %q, want no error", m.status)
+	}
+	if len(m.d.Elements) != 1 || m.d.Elements[0].ID != "b2" {
+		t.Fatalf("after delete elements = %+v, want only b2", m.d.Elements)
+	}
+	if len(m.selected) != 0 {
+		t.Errorf("selection = %v, want empty", m.selected)
+	}
+}
+
 func TestMovingBothBoxesInOneCommitRederivesOnce(t *testing.T) {
 	m := twoBoxes(t)
 	if !m.commitCmds([]canvas.Command{canvas.EdgeCmd{From: "b1", To: "b2"}}) {
