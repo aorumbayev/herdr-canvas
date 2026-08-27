@@ -91,10 +91,13 @@ func brushHeaderSuffix(color string, fill bool) string {
 }
 
 func styleCell(cp canvas.CellPaint) string {
-	if cp.FG == "" && cp.BG == "" {
+	if cp.FG == "" && cp.BG == "" && !cp.Reverse {
 		return string(cp.Ch)
 	}
 	style := lipgloss.NewStyle()
+	if cp.Reverse {
+		style = style.Reverse(true)
+	}
 	if cp.FG != "" {
 		style = style.Foreground(lipgloss.Color(ansiIndex(cp.FG)))
 	}

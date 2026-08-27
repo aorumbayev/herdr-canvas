@@ -27,6 +27,36 @@ const (
 	glyphTeeUp    = '┴'
 )
 
+// The double-line set. An edge draws with these glyphs, so a reader can tell a
+// line that sticks to two boxes from a line that floats. Every glyph is one
+// terminal cell wide, like the single set.
+const (
+	dblHoriz    = '═'
+	dblVert     = '║'
+	dblTopLeft  = '╔'
+	dblTopRight = '╗'
+	dblLowLeft  = '╚'
+	dblLowRight = '╝'
+)
+
+// lineSet is the run and bend glyphs of one line weight.
+type lineSet struct {
+	horiz, vert                          rune
+	topLeft, topRight, lowLeft, lowRight rune
+}
+
+var (
+	singleLine = lineSet{glyphHoriz, glyphVert, glyphTopLeft, glyphTopRight, glyphLowLeft, glyphLowRight}
+	doubleLine = lineSet{dblHoriz, dblVert, dblTopLeft, dblTopRight, dblLowLeft, dblLowRight}
+)
+
+func lineSetOf(e Element) lineSet {
+	if e.IsEdge() {
+		return doubleLine
+	}
+	return singleLine
+}
+
 // Render produces the grid. Render is a pure function of the elements. Later
 // elements in the slice cover earlier elements.
 func (d *Diagram) Render() Grid {
@@ -90,9 +120,9 @@ func drawLabel(g Grid, e Element) {
 }
 
 func drawLine(g Grid, e Element) {
-	pts, glyphs := elbow(e.X1, e.Y1, e.X2, e.Y2)
-	sdx, sdy := startDir(e.X1, e.Y1, e.X2, e.Y2)
-	edx, edy := endDir(e.X1, e.Y1, e.X2, e.Y2)
+	pts := linePoints(e)
+	glyphs := routeGlyphs(pts, lineSetOf(e))
+	sdx, sdy, edx, edy := pathDirs(pts)
 	last := len(pts) - 1
 	for i, p := range pts {
 		ch := glyphs[i]
@@ -115,12 +145,90 @@ func drawLine(g Grid, e Element) {
 		}
 		g[p] = ch
 	}
+	drawLineLabel(g, e)
 }
 
-// elbow returns the cells of an orthogonal path from (x1,y1) to (x2,y2), with
-// the glyph of each cell. The path runs on the y axis first, then on the x
-// axis. A path that turns has one corner cell. A straight path has none.
-func elbow(x1, y1, x2, y2 int) ([][2]int, []rune) {
+// drawLineLabel writes the label of a line near the middle of its longest
+// straight run. A label that does not fit is skipped; the legend still carries
+// it.
+func drawLineLabel(g Grid, e Element) {
+	for _, c := range lineLabelCells(e) {
+		if r := []rune(c.Ch); len(r) > 0 {
+			g[[2]int{c.X, c.Y}] = r[0]
+		}
+	}
+}
+
+// lineLabelCells returns the cells of a line label. A horizontal run carries
+// the label inside the run, keeping one glyph at each end of the run. A
+// vertical run carries the label beside the line, one column to the right of
+// the middle cell.
+func lineLabelCells(e Element) []Cell {
+	label := []rune(e.Label)
+	if e.Type != Line || len(label) == 0 {
+		return nil
+	}
+	run, vertical := longestRun(linePoints(e))
+	if len(run) < 3 {
+		return nil
+	}
+	mid := run[len(run)/2]
+	if vertical {
+		return labelRow(label, mid[0]+1, mid[1])
+	}
+	if len(label) > len(run)-2 {
+		return nil
+	}
+	return labelRow(label, mid[0]-len(label)/2, mid[1])
+}
+
+func labelRow(label []rune, x, y int) []Cell {
+	if x < 0 {
+		return nil
+	}
+	cells := make([]Cell, 0, len(label))
+	for i, r := range label {
+		cells = append(cells, Cell{X: x + i, Y: y, Ch: string(r)})
+	}
+	return cells
+}
+
+// longestRun returns the longest straight leg of a path, and whether that leg
+// is vertical. A tie goes to the horizontal leg, because a label reads along
+// it.
+func longestRun(pts [][2]int) ([][2]int, bool) {
+	if len(pts) < 2 {
+		return pts, false
+	}
+	var best [][2]int
+	bestVert := false
+	start := 0
+	for i := 1; i <= len(pts); i++ {
+		end := i == len(pts)
+		vertical := pts[start][0] == pts[start+1][0]
+		if !end && sameAxis(pts[start], pts[i], vertical) {
+			continue
+		}
+		run := pts[start:i]
+		if len(run) > len(best) || (len(run) == len(best) && !vertical) {
+			best, bestVert = run, vertical
+		}
+		start = i - 1
+	}
+	return best, bestVert
+}
+
+// sameAxis reports whether p stays on the run that started at from.
+func sameAxis(from, p [2]int, vertical bool) bool {
+	if vertical {
+		return p[0] == from[0]
+	}
+	return p[1] == from[1]
+}
+
+// elbowPoints returns the cells of an orthogonal path from (x1,y1) to (x2,y2).
+// The path runs on the y axis first, then on the x axis.
+func elbowPoints(x1, y1, x2, y2 int) [][2]int {
 	sx, sy := sign(x2-x1), sign(y2-y1)
 	var pts [][2]int
 	for y := y1; ; y += sy {
@@ -135,61 +243,134 @@ func elbow(x1, y1, x2, y2 int) ([][2]int, []rune) {
 			break
 		}
 	}
+	return pts
+}
+
+// linePoints returns the cells a line occupies. An edge takes the three
+// segment route; every other line keeps the documented elbow.
+func linePoints(e Element) [][2]int {
+	if e.IsEdge() {
+		return edgePoints(e.X1, e.Y1, e.X2, e.Y2, e.Vertical)
+	}
+	return elbowPoints(e.X1, e.Y1, e.X2, e.Y2)
+}
+
+// edgePoints returns the cells of an edge route. The route leaves the source
+// box straight out of the border it starts on, crosses the gap between the two
+// boxes, and arrives the same way, so its last run always points into the
+// target box and never travels along a border of either box. A route with
+// nothing to cross collapses to one straight run.
+func edgePoints(x1, y1, x2, y2 int, vertical bool) [][2]int {
+	var pts [][2]int
+	if vertical {
+		mid := between(y1, y2)
+		pts = appendRun(pts, x1, y1, x1, mid)
+		pts = appendRun(pts, x1, mid, x2, mid)
+		return appendRun(pts, x2, mid, x2, y2)
+	}
+	mid := between(x1, x2)
+	pts = appendRun(pts, x1, y1, mid, y1)
+	pts = appendRun(pts, mid, y1, mid, y2)
+	return appendRun(pts, mid, y2, x2, y2)
+}
+
+// between returns a coordinate strictly between a and b. Adjacent cells have
+// no such coordinate; the route then turns in the cell next to a, which is the
+// diagonally adjacent case EdgeEndpoints attaches at the corners for.
+func between(a, b int) int {
+	if abs(b-a) < 2 {
+		return a
+	}
+	return (a + b) / 2
+}
+
+// appendRun adds the cells from (x1,y1) to (x2,y2) along one axis, without
+// repeating the cell the previous run ended on.
+func appendRun(pts [][2]int, x1, y1, x2, y2 int) [][2]int {
+	sx, sy := sign(x2-x1), sign(y2-y1)
+	x, y := x1, y1
+	for {
+		p := [2]int{x, y}
+		if len(pts) == 0 || pts[len(pts)-1] != p {
+			pts = append(pts, p)
+		}
+		if x == x2 && y == y2 {
+			return pts
+		}
+		x, y = x+sx, y+sy
+	}
+}
+
+// routeGlyphs gives each cell of a path its glyph in the given weight. A cell
+// with one vertical and one horizontal neighbour is a bend.
+func routeGlyphs(pts [][2]int, s lineSet) []rune {
 	glyphs := make([]rune, len(pts))
 	for i, p := range pts {
-		vert := (i > 0 && pts[i-1][0] == p[0]) || (i < len(pts)-1 && pts[i+1][0] == p[0])
-		horiz := (i > 0 && pts[i-1][1] == p[1]) || (i < len(pts)-1 && pts[i+1][1] == p[1])
+		var up, down, left, right bool
+		mark := func(q [2]int) {
+			switch {
+			case q[1] < p[1]:
+				up = true
+			case q[1] > p[1]:
+				down = true
+			case q[0] < p[0]:
+				left = true
+			case q[0] > p[0]:
+				right = true
+			}
+		}
+		if i > 0 {
+			mark(pts[i-1])
+		}
+		if i < len(pts)-1 {
+			mark(pts[i+1])
+		}
 		switch {
-		case vert && horiz:
-			glyphs[i] = corner(sx, sy)
-		case vert:
-			glyphs[i] = glyphVert
+		case (up || down) && (left || right):
+			glyphs[i] = bend(up, right, s)
+		case up || down:
+			glyphs[i] = s.vert
 		default:
-			glyphs[i] = glyphHoriz
+			glyphs[i] = s.horiz
 		}
 	}
-	return pts, glyphs
+	return glyphs
 }
 
-// corner returns the bend glyph of an elbow that arrives on the y axis in the
-// direction sy and leaves on the x axis in the direction sx.
-func corner(sx, sy int) rune {
-	if sy > 0 {
-		if sx > 0 {
-			return glyphLowLeft
+// bend returns the corner glyph of a cell whose two arms point up or down, and
+// left or right.
+func bend(up, right bool, s lineSet) rune {
+	if up {
+		if right {
+			return s.lowLeft
 		}
-		return glyphLowRight
+		return s.lowRight
 	}
-	if sx > 0 {
-		return glyphTopLeft
+	if right {
+		return s.topLeft
 	}
-	return glyphTopRight
+	return s.topRight
 }
 
-// startDir gives the direction the path takes out of its first cell.
-func startDir(x1, y1, x2, y2 int) (int, int) {
-	if y1 != y2 {
-		return 0, sign(y2 - y1)
+// pathDirs gives the direction a path leaves its first cell and the direction
+// it takes into its last cell.
+func pathDirs(pts [][2]int) (sdx, sdy, edx, edy int) {
+	if len(pts) < 2 {
+		return 0, 0, 0, 0
 	}
-	return sign(x2 - x1), 0
-}
-
-// endDir gives the direction the path takes into its last cell.
-func endDir(x1, y1, x2, y2 int) (int, int) {
-	if x1 != x2 {
-		return sign(x2 - x1), 0
-	}
-	return 0, sign(y2 - y1)
+	last := len(pts) - 1
+	return sign(pts[1][0] - pts[0][0]), sign(pts[1][1] - pts[0][1]),
+		sign(pts[last][0] - pts[last-1][0]), sign(pts[last][1] - pts[last-1][1])
 }
 
 func isLineChar(r rune) bool {
-	switch r {
-	case glyphHoriz, glyphVert, glyphCross, glyphTeeRight, glyphTeeLeft, glyphTeeDown, glyphTeeUp:
-		return true
-	case glyphTopLeft, glyphTopRight, glyphLowLeft, glyphLowRight:
+	if _, ok := vertWeight(r); ok {
 		return true
 	}
-	return false
+	if _, ok := horizWeight(r); ok {
+		return true
+	}
+	return isCorner(r) || isJunction(r)
 }
 
 func sign(n int) int {
@@ -257,6 +438,13 @@ func legendLine(e Element) string {
 		if e.Label != "" {
 			fmt.Fprintf(&b, " %q", e.Label)
 		}
+	case Line:
+		if e.Arrow != "" && e.Arrow != ArrowNone {
+			fmt.Fprintf(&b, " arrow %s", e.Arrow)
+		}
+		if e.Label != "" {
+			fmt.Fprintf(&b, " %q", e.Label)
+		}
 	case Text:
 		fmt.Fprintf(&b, " %q", e.Text)
 	}
@@ -268,6 +456,9 @@ func legendKind(e Element) string {
 	case Box:
 		return "box"
 	case Line:
+		if e.IsEdge() {
+			return "edge"
+		}
 		return "line"
 	case Text:
 		return "text"
@@ -281,6 +472,9 @@ func legendKind(e Element) string {
 func legendGeom(e Element) string {
 	switch e.Type {
 	case Box, Line:
+		if e.IsEdge() {
+			return e.From + "->" + e.To
+		}
 		return fmt.Sprintf("%d,%d-%d,%d", e.X1, e.Y1, e.X2, e.Y2)
 	case Text:
 		return fmt.Sprintf("%d,%d", e.X, e.Y)

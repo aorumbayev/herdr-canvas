@@ -55,6 +55,8 @@ Push `prefix+d` to open the canvas or to close the canvas. If you are in a git r
 | `esc` | Cancel the action. Then select the select tool. Then remove the selection. |
 | `q` | Stop herdr-canvas. |
 
+Draw an arrow from one box to a second box. The arrow sticks to the two boxes. If you move a box, the arrow moves with the box. If you erase a box, herdr-canvas erases the arrow. One undo step puts the box and the arrow back. The arrow goes out of the first box, across the space between the boxes, and into the second box. If the two boxes are in line, the arrow is one straight line. The arrow does not go along the border of a box. An arrow that sticks has a doubled line (`═` and `║`). An arrow that does not touch two boxes has a single line (`─` and `│`). While you drag, herdr-canvas marks the box under the pointer.
+
 herdr-canvas keeps each change immediately. Push Recenter to put the diagram in the view. If you erase a diagram in the list, herdr-canvas tells you to push `y` or `N`. You cannot cancel that erase.
 
 ## herdr agents
@@ -63,11 +65,28 @@ Push `s`. herdr-canvas writes `export` and `skill` to the input of the herdr age
 
 The diagrams are in `~/.local/share/herdr-canvas/`.
 
+An agent makes many changes with one `batch` command. The `batch` command reads a script from the standard input. There is one element command on each line.
+
+```bash
+herdr-canvas --name mydiagram batch <<'EOF'
+box 2 1 20 6 "web server" as web
+box 2 12 20 17 "database" as db
+line 11 6 11 12 --arrow end
+color web green
+EOF
+```
+
+herdr-canvas applies all of the lines or none of the lines. herdr-canvas keeps the file one time. herdr-canvas then shows the new identifiers and the picture. If a line is bad, the error gives the number of the line, and herdr-canvas does not change the file.
+
+The ` as <alias>` words give a name to a new element. Use that name on a subsequent line of the same script. herdr-canvas does not keep the name in the JSON file.
+
+For one small change, use one command:
+
 ```bash
 herdr-canvas list
 herdr-canvas --name mydiagram export
 herdr-canvas --name mydiagram box 2 1 20 6 "web server"
-herdr-canvas --name mydiagram line 20 3 34 3 --arrow end
+herdr-canvas --name mydiagram edge b1 b3 "retry"
 herdr-canvas --name mydiagram delete b1
 herdr-canvas skill
 ```
@@ -77,9 +96,11 @@ The `--name` alternative selects a diagram. The `--create` alternative makes a d
 | Command | Function |
 | --- | --- |
 | `herdr-canvas` | Opens the TUI |
+| `batch` | Applies a script of element commands from the standard input |
 | `new` / `open` / `list` | Makes a diagram, opens a diagram, or shows the names of the diagrams |
 | `export` | Shows the picture and the legend |
 | `box` `line` `text` `draw` | Adds an element (`--color`, box `--fill`) |
+| `edge` / `unedge` | Connects two boxes with an arrow that follows them, or removes that arrow |
 | `move` `delete` `label` `color` `fill` | Changes an element |
 | `skill` / `setup` / `update` / `--version` | Shows the instructions, writes the hotkey, installs a tag, or shows the version |
 

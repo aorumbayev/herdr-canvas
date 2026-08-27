@@ -11,6 +11,19 @@ func (d *Diagram) ElementAt(x, y int) *Element {
 	return nil
 }
 
+// BoxAt returns a pointer to the topmost box whose rectangle contains (x, y),
+// or nil. The border of a box counts as inside. BoxAt looks only at boxes, so
+// a line drawn over a box does not hide it.
+func (d *Diagram) BoxAt(x, y int) *Element {
+	for i := len(d.Elements) - 1; i >= 0; i-- {
+		e := &d.Elements[i]
+		if e.Type == Box && e.covers(x, y) {
+			return e
+		}
+	}
+	return nil
+}
+
 // ElementsInRect returns every element that intersects the inclusive rectangle
 // (x1,y1)-(x2,y2). Corner order does not matter.
 func (d *Diagram) ElementsInRect(x1, y1, x2, y2 int) []*Element {
@@ -91,7 +104,7 @@ func (e *Element) covers(x, y int) bool {
 	case Box:
 		return x >= e.X1 && x <= e.X2 && y >= e.Y1 && y <= e.Y2
 	case Line:
-		pts, _ := elbow(e.X1, e.Y1, e.X2, e.Y2)
+		pts := linePoints(*e)
 		for _, p := range pts {
 			if p == [2]int{x, y} {
 				return true
@@ -119,7 +132,7 @@ func (e *Element) intersectsRect(x1, y1, x2, y2 int) bool {
 	case Box:
 		return !(e.X2 < x1 || e.X1 > x2 || e.Y2 < y1 || e.Y1 > y2)
 	case Line:
-		pts, _ := elbow(e.X1, e.Y1, e.X2, e.Y2)
+		pts := linePoints(*e)
 		for _, p := range pts {
 			if p[0] >= x1 && p[0] <= x2 && p[1] >= y1 && p[1] <= y2 {
 				return true

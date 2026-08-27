@@ -127,8 +127,16 @@ func (m *model) deleteSelected() {
 		return
 	}
 	cmds := make([]canvas.Command, 0, len(m.selected))
-	for id := range m.selected {
-		cmds = append(cmds, canvas.DeleteCmd{ID: id})
+	for _, e := range m.d.Elements {
+		if !m.selected[e.ID] {
+			continue
+		}
+		// Deleting a box already drops its edges, so asking for the edge
+		// again would fail on an id that is gone.
+		if e.IsEdge() && (m.selected[e.From] || m.selected[e.To]) {
+			continue
+		}
+		cmds = append(cmds, canvas.DeleteCmd{ID: e.ID})
 	}
 	if m.commitCmds(cmds) {
 		m.clearSelection()
