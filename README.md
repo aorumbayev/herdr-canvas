@@ -63,11 +63,26 @@ Push `s`. herdr-canvas writes `export` and `skill` to the input of the herdr age
 
 The diagrams are in `~/.local/share/herdr-canvas/`.
 
+An agent makes many changes with one `batch` command. The `batch` command reads a script from the standard input. There is one element command on each line.
+
+```bash
+herdr-canvas --name mydiagram batch <<'EOF'
+box 2 1 20 6 "web server" as web
+box 2 12 20 17 "database" as db
+line 11 6 11 12 --arrow end
+color web green
+EOF
+```
+
+herdr-canvas applies all of the lines or none of the lines. herdr-canvas keeps the file one time. herdr-canvas then shows the new identifiers and the picture. If a line is bad, the error gives the number of the line, and herdr-canvas does not change the file.
+
+The ` as <alias>` words give a name to a new element. Use that name on a subsequent line of the same script. herdr-canvas does not keep the name in the JSON file.
+
+For one small change, use one command:
+
 ```bash
 herdr-canvas list
 herdr-canvas --name mydiagram export
-herdr-canvas --name mydiagram box 2 1 20 6 "web server"
-herdr-canvas --name mydiagram line 20 3 34 3 --arrow end
 herdr-canvas --name mydiagram delete b1
 herdr-canvas skill
 ```
@@ -77,6 +92,7 @@ The `--name` alternative selects a diagram. The `--create` alternative makes a d
 | Command | Function |
 | --- | --- |
 | `herdr-canvas` | Opens the TUI |
+| `batch` | Applies a script of element commands from the standard input |
 | `new` / `open` / `list` | Makes a diagram, opens a diagram, or shows the names of the diagrams |
 | `export` | Shows the picture and the legend |
 | `box` `line` `text` `draw` | Adds an element (`--color`, box `--fill`) |
