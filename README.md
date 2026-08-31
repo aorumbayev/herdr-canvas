@@ -51,6 +51,7 @@ Push `prefix+d` to open the canvas or to close the canvas. If you are in a git r
 | `s` | Send the diagram to the herdr agent. |
 | `o` | Open the diagram list. |
 | `?` / `h` | Show the controls. |
+| `ctrl+a` | Select each item in the diagram. herdr-canvas also selects the select tool. |
 | delete/backspace | Erase the selection (one undo step). |
 | `esc` | Cancel the action. Then select the select tool. Then remove the selection. |
 | `q` | Stop herdr-canvas. |

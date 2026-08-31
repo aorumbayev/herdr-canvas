@@ -359,3 +359,113 @@ func TestClickEmptyClearsSelection(t *testing.T) {
 		t.Fatalf("empty click should clear, got %v", m.selected)
 	}
 }
+
+func TestSelectAllSelectsEveryElementIncludingEdges(t *testing.T) {
+	m := editor(t)
+	for _, c := range []canvas.Command{
+		canvas.BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2},
+		canvas.BoxCmd{X1: 10, Y1: 0, X2: 12, Y2: 2},
+		canvas.TextCmd{X: 0, Y: 40, Text: "off screen"},
+		canvas.EdgeCmd{From: "b1", To: "b2"},
+	} {
+		if err := m.d.Apply(c); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+	}
+	m.tool = toolSelect
+
+	m = send(t, m, ctrlA())
+
+	want := map[string]bool{"b1": true, "b2": true, "t3": true, "l4": true}
+	if len(m.selected) != len(want) {
+		t.Fatalf("selected = %v, want %v", m.selected, want)
+	}
+	for id := range want {
+		if !m.selected[id] {
+			t.Fatalf("selected = %v, want %v", m.selected, want)
+		}
+	}
+}
+
+func TestSelectAllSwitchesAwayFromADrawingTool(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	m.tool = toolBox
+
+	m = send(t, m, ctrlA())
+
+	if m.tool != toolSelect {
+		t.Fatalf("tool = %v, want select", m.tool)
+	}
+	if !m.selected["b1"] {
+		t.Fatalf("selected = %v, want b1", m.selected)
+	}
+}
+
+func TestSelectAllTwiceStillSelectsAll(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	m.tool = toolSelect
+
+	m = send(t, m, ctrlA(), ctrlA())
+
+	if !m.selected["b1"] || len(m.selected) != 1 {
+		t.Fatalf("selected = %v, want only b1", m.selected)
+	}
+}
+
+func TestSelectAllOnAnEmptyDiagramSelectsNothing(t *testing.T) {
+	m := editor(t)
+	m.tool = toolSelect
+
+	m = send(t, m, ctrlA())
+
+	if len(m.selected) != 0 {
+		t.Fatalf("selected = %v, want empty", m.selected)
+	}
+	if m.status != "" {
+		t.Fatalf("status = %q, want empty", m.status)
+	}
+}
+
+func TestSelectAllIsIgnoredWhileTyping(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	m.tool = toolText
+	m = send(t, m, leftDown(6, 6), leftUp(6, 6), key("h"), key("i"))
+	if !m.typing {
+		t.Fatal("setup: expected the text tool to be typing")
+	}
+
+	m = send(t, m, ctrlA())
+
+	if !m.typing {
+		t.Fatal("ctrl+a stopped the typing")
+	}
+	if len(m.selected) != 0 {
+		t.Fatalf("selected = %v, want empty", m.selected)
+	}
+	if m.textBuf != "hi" {
+		t.Fatalf("textBuf = %q, want %q", m.textBuf, "hi")
+	}
+}
+
+func TestHelpDocumentsSelectAllInBothWidths(t *testing.T) {
+	for _, width := range []int{40, 80} {
+		found := false
+		for _, line := range helpLines(width) {
+			if indexOf(line, "ctrl+a") >= 0 {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("help at width %d does not mention ctrl+a", width)
+		}
+	}
+}

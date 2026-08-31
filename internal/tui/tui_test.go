@@ -1910,3 +1910,5 @@ func TestOpenFromPickerDefaultsToSelect(t *testing.T) {
 		t.Fatalf("tool = %v, want select", m.tool)
 	}
 }
+
+func ctrlA() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl} }

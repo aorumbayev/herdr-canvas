@@ -44,8 +44,9 @@ const (
 )
 
 var (
-	keyUndo = bkey.NewBinding(bkey.WithKeys("ctrl+z"))
-	keyRedo = bkey.NewBinding(bkey.WithKeys("ctrl+shift+z", "ctrl+y"))
+	keyUndo      = bkey.NewBinding(bkey.WithKeys("ctrl+z"))
+	keyRedo      = bkey.NewBinding(bkey.WithKeys("ctrl+shift+z", "ctrl+y"))
+	keySelectAll = bkey.NewBinding(bkey.WithKeys("ctrl+a"))
 )
 
 var toolNames = map[tool]string{
@@ -643,6 +644,9 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case bkey.Matches(msg, keyRedo):
 		m.doRedo()
+		return nil
+	case bkey.Matches(msg, keySelectAll):
+		m.selectAll()
 		return nil
 	}
 	switch msg.String() {
@@ -1441,8 +1445,8 @@ func helpLines(width int) []string {
 			"Mouse  drag draw  click select/text",
 			"  double-click edit text  mid-drag pan",
 			"  wheel pan  shift=side  ctrl=same pan",
-			"Keys  arrows  space/enter  c color  f fill",
-			"  del/back ctrl+z/y s send o picker t tour esc",
+			"Keys  arrows space/enter c color f fill",
+			"  del/back ctrl+a all ctrl+z/y s send o picker t tour esc",
 			"Send/Picker  ↑↓/jk enter esc  n=new",
 			"esc / ? / h close",
 		}
@@ -1468,7 +1472,7 @@ func helpLines(width int) []string {
 		"  c              color palette · f fill brush / selected boxes",
 		"",
 		"View   click canvases (o) to open picker · recenter fits · t tour",
-		"Edit   ctrl+z undo · ctrl+y redo · s send · o picker · esc select · q quit",
+		"Edit   ctrl+a all · ctrl+z/y undo/redo · s send · o picker · esc select · q quit",
 		"Send   ↑↓/jk choose · enter send · esc cancel",
 		"Picker ↑↓/jk · enter open · n new · delete confirm · esc back",
 		"",
