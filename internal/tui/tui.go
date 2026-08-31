@@ -47,6 +47,8 @@ var (
 	keyUndo      = bkey.NewBinding(bkey.WithKeys("ctrl+z"))
 	keyRedo      = bkey.NewBinding(bkey.WithKeys("ctrl+shift+z", "ctrl+y"))
 	keySelectAll = bkey.NewBinding(bkey.WithKeys("ctrl+a"))
+	keyCopy      = bkey.NewBinding(bkey.WithKeys("ctrl+c"))
+	keyPaste     = bkey.NewBinding(bkey.WithKeys("ctrl+v"))
 )
 
 var toolNames = map[tool]string{
@@ -130,6 +132,8 @@ type model struct {
 	dismiss func(string) error
 	hidden  func(string) (bool, error)
 	notice  string
+
+	clip copyBuffer
 
 	brushColor string
 	brushFill  bool
@@ -389,7 +393,7 @@ func (m *model) pickKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.phase = phaseEdit
 			m.status = ""
 		}
-	case "q", "ctrl+c":
+	case "q":
 		return tea.Quit
 	}
 	return nil
@@ -648,6 +652,12 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 	case bkey.Matches(msg, keySelectAll):
 		m.selectAll()
 		return nil
+	case bkey.Matches(msg, keyCopy):
+		m.copySelection()
+		return nil
+	case bkey.Matches(msg, keyPaste):
+		m.pasteBuffer()
+		return nil
 	}
 	switch msg.String() {
 	case "1", "2", "3", "4", "5", "6":
@@ -680,7 +690,7 @@ func (m *model) editKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.openWelcome()
 	case "esc":
 		m.editEsc()
-	case "q", "ctrl+c":
+	case "q":
 		m.save()
 		return tea.Quit
 	}
@@ -716,7 +726,7 @@ func (m *model) paletteKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.pickBrushColor("")
 	case "1", "2", "3", "4", "5", "6", "7", "8":
 		m.pickBrushColor(colorDigit(msg.String()))
-	case "q", "ctrl+c":
+	case "q":
 		m.save()
 		return tea.Quit
 	}
@@ -786,7 +796,7 @@ func (m *model) helpKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc", "?", "h":
 		m.phase = phaseEdit
-	case "q", "ctrl+c":
+	case "q":
 		m.save()
 		return tea.Quit
 	}
@@ -1193,17 +1203,33 @@ func (m *model) applyMany(cmds []canvas.Command) bool {
 }
 
 func (m *model) commitCmds(cmds []canvas.Command) bool {
+	return m.commitStaged(cmds, nil)
+}
+
+// commitStaged commits cmds as one undo step. A paste needs the ids that the
+// first stage produced before it can name its edges, so more builds a second
+// list of commands from the diagram the first stage left behind.
+func (m *model) commitStaged(cmds []canvas.Command, more func() []canvas.Command) bool {
 	if len(cmds) == 0 {
 		return false
 	}
 	before := cloneDiagram(m.d)
 	beforeSel := cloneSel(m.selected)
-	for _, cmd := range cmds {
-		if err := m.d.Apply(cmd); err != nil {
-			m.d = before
-			m.status = err.Error()
-			return false
+	apply := func(list []canvas.Command) bool {
+		for _, cmd := range list {
+			if err := m.d.Apply(cmd); err != nil {
+				m.d = before
+				m.status = err.Error()
+				return false
+			}
 		}
+		return true
+	}
+	if !apply(cmds) {
+		return false
+	}
+	if more != nil && !apply(more()) {
+		return false
 	}
 	m.hist.push(before, beforeSel)
 	m.save()
@@ -1447,13 +1473,13 @@ func helpLines(width int) []string {
 			"  wheel pan  shift=side  ctrl=same pan",
 			"Keys  arrows space/enter c color f fill",
 			"  del/back ctrl+a all ctrl+z/y s send o picker t tour esc",
+			"  ctrl+c copy  ctrl+v paste at cursor",
 			"Send/Picker  ↑↓/jk enter esc  n=new",
 			"esc / ? / h close",
 		}
 	}
 	return []string{
 		"herdr-canvas — help",
-		"",
 		"Tools  1 select  2 box  3 line  4 arrow  5 text  6 draw  ? help",
 		"",
 		"Mouse",
@@ -1473,9 +1499,9 @@ func helpLines(width int) []string {
 		"",
 		"View   click canvases (o) to open picker · recenter fits · t tour",
 		"Edit   ctrl+a all · ctrl+z/y undo/redo · s send · o picker · esc select · q quit",
+		"Copy   ctrl+c copy the selection · ctrl+v paste at the cursor",
 		"Send   ↑↓/jk choose · enter send · esc cancel",
 		"Picker ↑↓/jk · enter open · n new · delete confirm · esc back",
-		"",
 		"esc / ? / h close",
 	}
 }
