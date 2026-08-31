@@ -269,3 +269,75 @@ func TestHelpDocumentsCopyAndPasteInBothWidths(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyPasteHandlesTextThatStartsWithANewline(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.TextCmd{X: 3, Y: 3, Text: "\nhi"}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	m.tool = toolSelect
+	m.selected = map[string]bool{"t1": true}
+	m.cursor = [2]int{0, 0}
+
+	m = send(t, m, ctrlC(), ctrlV())
+
+	if len(m.d.Elements) != 2 {
+		t.Fatalf("elements = %d, want 2 (status %q)", len(m.d.Elements), m.status)
+	}
+	if got := m.d.Elements[1]; got.X != 0 || got.Y != 0 || got.Text != "\nhi" {
+		t.Fatalf("pasted = %+v, want %q at (0,0)", got, "\nhi")
+	}
+}
+
+func TestCopyingOnlyAnEdgeKeepsTheBufferAndReportsIt(t *testing.T) {
+	m := editor(t)
+	for _, c := range []canvas.Command{
+		canvas.BoxCmd{X1: 0, Y1: 0, X2: 3, Y2: 2, Label: "keep"},
+		canvas.BoxCmd{X1: 8, Y1: 0, X2: 11, Y2: 2},
+		canvas.EdgeCmd{From: "b1", To: "b2"},
+	} {
+		if err := m.d.Apply(c); err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+	}
+	m.tool = toolSelect
+	m.selected = map[string]bool{"b1": true}
+	m = send(t, m, ctrlC())
+
+	m.selected = map[string]bool{"l3": true}
+	m = send(t, m, ctrlC())
+	if m.status == "" {
+		t.Error("copying only an edge said nothing")
+	}
+
+	m.cursor = [2]int{0, 10}
+	m = send(t, m, ctrlV())
+
+	if len(m.d.Elements) != 4 {
+		t.Fatalf("elements = %d, want 4", len(m.d.Elements))
+	}
+	if got := m.d.Elements[3]; got.Label != "keep" || got.X1 != 0 || got.Y1 != 10 {
+		t.Fatalf("pasted = %+v, want the box copied before the edge", got)
+	}
+}
+
+func TestPasteUnderADrawingToolSwitchesToSelect(t *testing.T) {
+	m := editor(t)
+	if err := m.d.Apply(canvas.BoxCmd{X1: 0, Y1: 0, X2: 2, Y2: 2}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	m.tool = toolSelect
+	m.selected = map[string]bool{"b1": true}
+	m = send(t, m, ctrlC())
+
+	m.tool = toolBox
+	m.cursor = [2]int{6, 6}
+	m = send(t, m, ctrlV())
+
+	if m.tool != toolSelect {
+		t.Fatalf("tool = %v, want toolSelect", m.tool)
+	}
+	if !m.selected["b2"] || len(m.selected) != 1 {
+		t.Fatalf("selected = %v, want only b2", m.selected)
+	}
+}

@@ -29,6 +29,11 @@ func (m *model) copySelection() {
 			continue
 		}
 		x1, y1, _, _, ok := e.Bounds()
+		if e.Type == canvas.Text {
+			// shiftCmd rebases the authored X/Y; a leading newline puts the
+			// rendered bounds a row below it.
+			x1, y1, ok = e.X, e.Y, true
+		}
 		if !ok {
 			continue
 		}
@@ -40,7 +45,10 @@ func (m *model) copySelection() {
 		}
 		first = false
 	}
-	if len(buf.elems) == 0 {
+	// first is still set when nothing in the selection can be pasted, which
+	// keeps an edge-only copy from replacing a good buffer.
+	if first {
+		m.status = "nothing to copy; an edge copies only with both its boxes"
 		return
 	}
 	m.clip = buf
@@ -49,6 +57,9 @@ func (m *model) copySelection() {
 func (m *model) pasteBuffer() {
 	if len(m.clip.elems) == 0 {
 		return
+	}
+	if m.tool != toolSelect {
+		m.switchTool(toolSelect)
 	}
 	m.reloadIfChanged()
 	dx, dy := m.cursor[0]-m.clip.x, m.cursor[1]-m.clip.y
