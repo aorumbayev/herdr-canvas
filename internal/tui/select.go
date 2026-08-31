@@ -156,3 +156,18 @@ func selectionMarkers(e canvas.Element) []canvas.Cell {
 		{X: x2, Y: y2, Ch: selectGlyph},
 	}
 }
+
+// selectAll selects every element of the current diagram. A drawing tool
+// clears the selection as soon as it acts, so switch to select first.
+func (m *model) selectAll() {
+	if m.tool != toolSelect {
+		m.switchTool(toolSelect)
+	}
+	if len(m.d.Elements) == 0 {
+		return
+	}
+	m.selected = make(map[string]bool, len(m.d.Elements))
+	for _, e := range m.d.Elements {
+		m.selected[e.ID] = true
+	}
+}

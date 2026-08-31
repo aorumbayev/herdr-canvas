@@ -51,11 +51,13 @@ Push `prefix+d` to open the canvas or to close the canvas. If you are in a git r
 | `s` | Send the diagram to the herdr agent. |
 | `o` | Open the diagram list. |
 | `?` / `h` | Show the controls. |
+| `ctrl+a` | Select each item in the diagram. herdr-canvas also selects the select tool. |
+| `ctrl+c` / `ctrl+v` | Copy the selection. Then put a copy of the selection at the cursor. |
 | delete/backspace | Erase the selection (one undo step). |
 | `esc` | Cancel the action. Then select the select tool. Then remove the selection. |
-| `q` | Stop herdr-canvas. |
+| `q` | Stop herdr-canvas. `ctrl+c` does not stop herdr-canvas. |
 
-Draw an arrow from one box to a second box. The arrow sticks to the two boxes. If you move a box, the arrow moves with the box. If you erase a box, herdr-canvas erases the arrow. One undo step puts the box and the arrow back. The arrow goes out of the first box, across the space between the boxes, and into the second box. If the two boxes are in line, the arrow is one straight line. The arrow does not go along the border of a box. An arrow that sticks has a doubled line (`═` and `║`). An arrow that does not touch two boxes has a single line (`─` and `│`). While you drag, herdr-canvas marks the box under the pointer.
+Draw an arrow from one box to a second box. The arrow sticks to the two boxes. If you move a box, the arrow moves with the box. If you erase a box, herdr-canvas erases the arrow. One undo step puts the box and the arrow back. The arrow goes out of the first box, across the space between the boxes, and into the second box. If the two boxes are in line, the arrow is one straight line. The arrow does not go along the border of a box. An arrow that sticks has a doubled line (`═` and `║`). An arrow that does not touch two boxes has a single line (`─` and `│`). While you drag, herdr-canvas marks the box under the pointer. If you copy two boxes and the arrow between the two boxes, herdr-canvas puts a new arrow between the two new boxes. If you copy only one of the two boxes, herdr-canvas does not copy the arrow.
 
 herdr-canvas keeps each change immediately. Push Recenter to put the diagram in the view. If you erase a diagram in the list, herdr-canvas tells you to push `y` or `N`. You cannot cancel that erase.
 
